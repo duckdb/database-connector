@@ -1,6 +1,6 @@
 #include "test_common.hpp"
 
-#include "make_unique.hpp"
+#include "dbconnector/make_unique.hpp"
 
 static const std::string group_name = "[make_unique]";
 

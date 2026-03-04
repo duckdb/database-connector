@@ -1,7 +1,7 @@
 #include "test_common.hpp"
 
-#include "make_unique.hpp"
-#include "pool.hpp"
+#include "dbconnector/make_unique.hpp"
+#include "dbconnector/pool.hpp"
 
 static const std::string group_name = "[pool]";
 
