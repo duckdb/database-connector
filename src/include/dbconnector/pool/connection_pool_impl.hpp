@@ -11,7 +11,7 @@ namespace dbconnector {
 namespace pool {
 
 template <typename ConnectionT>
-ConnectionPool<ConnectionT>::ConnectionPool(idx_t max_connections_p, idx_t timeout_ms_p,
+ConnectionPool<ConnectionT>::ConnectionPool(size_t max_connections_p, size_t timeout_ms_p,
                                             bool thread_local_cache_enabled_p)
     : max_connections(max_connections_p), timeout_ms(timeout_ms_p), total_connections(0), shutdown_flag(false),
       tl_cache_enabled(thread_local_cache_enabled_p) {
@@ -350,7 +350,7 @@ void ConnectionPool<ConnectionT>::Discard() {
 }
 
 template <typename ConnectionT>
-void ConnectionPool<ConnectionT>::SetMaxConnections(idx_t new_max) {
+void ConnectionPool<ConnectionT>::SetMaxConnections(size_t new_max) {
 	std::deque<std::unique_ptr<ConnectionT>> to_evict;
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
@@ -365,30 +365,30 @@ void ConnectionPool<ConnectionT>::SetMaxConnections(idx_t new_max) {
 }
 
 template <typename ConnectionT>
-idx_t ConnectionPool<ConnectionT>::GetMaxConnections() const {
+size_t ConnectionPool<ConnectionT>::GetMaxConnections() const {
 	std::lock_guard<std::mutex> lock(pool_lock);
 	return max_connections;
 }
 
 template <typename ConnectionT>
-idx_t ConnectionPool<ConnectionT>::GetAvailableConnections() const {
+size_t ConnectionPool<ConnectionT>::GetAvailableConnections() const {
 	std::lock_guard<std::mutex> lock(pool_lock);
 	return available.size();
 }
 
 template <typename ConnectionT>
-idx_t ConnectionPool<ConnectionT>::GetTotalConnections() const {
+size_t ConnectionPool<ConnectionT>::GetTotalConnections() const {
 	std::lock_guard<std::mutex> lock(pool_lock);
 	return total_connections;
 }
 
 template <typename ConnectionT>
-idx_t ConnectionPool<ConnectionT>::GetThreadLocalCacheHits() const {
+size_t ConnectionPool<ConnectionT>::GetThreadLocalCacheHits() const {
 	return tl_cache_hits.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-idx_t ConnectionPool<ConnectionT>::GetThreadLocalCacheMisses() const {
+size_t ConnectionPool<ConnectionT>::GetThreadLocalCacheMisses() const {
 	return tl_cache_misses.load(std::memory_order_relaxed);
 }
 
