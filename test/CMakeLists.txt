@@ -18,6 +18,6 @@ add_executable(test_database_connection
 target_include_directories(test_database_connection PRIVATE
     ../src/include
     catch
-    duckdb_capi
+    # duckdb_capi
     include
 )
