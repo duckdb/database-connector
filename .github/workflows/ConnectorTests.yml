@@ -51,3 +51,16 @@ jobs:
           cmake ../test
           cmake --build . --config Debug
           test_database_connection.exe
+
+  macos-tests-aarch64:
+    name: macOS Tests (aarch64)
+    runs-on: macos-latest
+    needs: linux-tests-amd64
+    env:
+      GEN: ninja
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Test
+        run: |
+          make test
