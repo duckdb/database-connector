@@ -51,7 +51,7 @@ TEST_CASE("Test pool size no thread-local", group_name) {
 
 	auto worker = [&pool]() {
 		auto conn = pool->TryAcquire();
-		REQUIRE(conn);
+		REQUIRE_THREAD(conn);
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	};
 	std::thread th1(worker);
@@ -85,7 +85,7 @@ TEST_CASE("Test pool size with thread-local", group_name) {
 
 	auto worker = [&pool]() {
 		auto conn = pool->ForceAcquire();
-		REQUIRE(conn);
+		REQUIRE_THREAD(conn);
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	};
 	std::thread th1(worker);

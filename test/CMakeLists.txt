@@ -8,6 +8,8 @@ if(MSVC)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
+option(ENABLE_THREAD_SANITIZER "Enable thread sanitizer." FALSE)
+
 add_executable(test_database_connection
     test_common.cpp
     test_defer.cpp
@@ -22,23 +24,24 @@ target_include_directories(test_database_connection PRIVATE
     include
 )
 
+if(${ENABLE_THREAD_SANITIZER})
+    message(STATUS "Thread sanitizer is enabled")
+    set(SANITIZER_TYPE thread)
+else()
+    set(SANITIZER_TYPE address)
+endif()
+
 if(NOT MSVC)
     target_compile_options(test_database_connection PRIVATE
         -O0
         -Wall
         -Werror
         -Wextra
-        -fsanitize=address
+        -fsanitize=${SANITIZER_TYPE}
     )
-    if(APPLE)
-        target_link_options(test_database_connection PRIVATE
-            -fsanitize=address
-        ) 
-    else()
-        target_link_libraries(test_database_connection PRIVATE
-            asan
-        )
-    endif()
+    target_link_options(test_database_connection PRIVATE
+        -fsanitize=${SANITIZER_TYPE}
+    ) 
 else()
     target_compile_options(test_database_connection PRIVATE
         /W4
