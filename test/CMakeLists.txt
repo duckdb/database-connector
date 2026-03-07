@@ -21,3 +21,23 @@ target_include_directories(test_database_connection PRIVATE
     # duckdb_capi
     include
 )
+
+if(NOT MSVC)
+    target_compile_options(test_database_connection PRIVATE
+        -O0
+        -Wall
+        -Werror
+        -Wextra
+        -fsanitize=address
+    )
+    target_link_libraries(test_database_connection PRIVATE
+        asan)
+else()
+    target_compile_options(test_database_connection PRIVATE
+        /W4
+        /WX
+    )
+    target_compile_definitions(test_database_connection PRIVATE
+        -D_CRT_SECURE_NO_WARNINGS
+    )
+endif()

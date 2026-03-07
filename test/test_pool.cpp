@@ -23,11 +23,11 @@ protected:
 		return dbconnector::make_unique<TestConnection>();
 	}
 
-	bool CheckConnectionHealthy(TestConnection &conn) override {
+	bool CheckConnectionHealthy(TestConnection &) override {
 		return true;
 	}
 
-	void ResetConnection(TestConnection &conn) override {
+	void ResetConnection(TestConnection &) override {
 		// no-op
 	}
 };

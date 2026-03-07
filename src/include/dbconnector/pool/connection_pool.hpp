@@ -46,7 +46,7 @@ protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
 	virtual bool CheckConnectionHealthy(ConnectionT &conn) = 0;
 	virtual void ResetConnection(ConnectionT &conn) = 0;
-	virtual bool TryRecoverConnection(ConnectionT &conn) {
+	virtual bool TryRecoverConnection(ConnectionT &) {
 		return false;
 	}
 
