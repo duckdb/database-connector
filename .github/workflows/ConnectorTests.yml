@@ -1,4 +1,4 @@
-name: Linux Tests 
+name: Connector Tests 
 on:
   push:
   pull_request:
@@ -35,3 +35,19 @@ jobs:
       - name: Build and Test
         run: |
           make test
+
+  windows-tests-amd64:
+    name: Windows Tests (amd64)
+    runs-on: windows-latest
+    needs: linux-tests-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Test
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          cmake ../test
+          cmake --build . --config Debug
+          test_database_connection.exe
