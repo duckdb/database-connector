@@ -1,9 +1,11 @@
-.PHONY: clean format format-fix format-check test
+.PHONY: all build clean format format-fix format-check test
 
 GENERATOR=
 ifeq ($(GEN),ninja)
 	GENERATOR=-G "Ninja"
 endif
+
+all: build
 
 clean:
 	rm -rf build
@@ -16,7 +18,9 @@ format-fix:
 format-check:
 	python scripts/format.py --check
 
-test: 
+build:
 	mkdir -p build/debug
 	cd build/debug && cmake -DCMAKE_BUILD_TYPE=Debug $(GENERATOR) ../../test && cmake --build . --config Debug
+
+test: build 
 	build/debug/test_database_connection
