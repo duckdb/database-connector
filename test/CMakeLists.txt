@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.5...3.29)
 
 project (database_connection_test C CXX)
 
-if (MSVC) 
+if(MSVC) 
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
-endif ()
+endif()
 
 add_executable(test_database_connection
     test_common.cpp
@@ -30,8 +30,15 @@ if(NOT MSVC)
         -Wextra
         -fsanitize=address
     )
-    target_link_libraries(test_database_connection PRIVATE
-        asan)
+    if(APPLE)
+        target_link_options(test_database_connection PRIVATE
+            -fsanitize=address
+        ) 
+    else()
+        target_link_libraries(test_database_connection PRIVATE
+            asan
+        )
+    endif()
 else()
     target_compile_options(test_database_connection PRIVATE
         /W4
