@@ -125,6 +125,14 @@ void ConnectionPool<ConnectionT>::ReturnFromThreadLocalCache(std::unique_ptr<Con
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
+	{
+		std::lock_guard<std::mutex> lock(pool_lock);
+		if (max_connections == 0) {
+			throw PoolException("Connection pool is disabled (pool_size=0). Use "
+			                    "the force acquire mode to create connections without pooling.");
+		}
+	}
+
 	auto tl_conn = TryAcquireFromThreadLocal();
 	if (tl_conn) {
 		return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(tl_conn));
@@ -179,6 +187,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
 			}
 		}
 
+		// Spurious wakeups re-evaluate all conditions above. The deadline is not reset.
 		if (pool_cv.wait_until(lock, deadline) == std::cv_status::timeout) {
 			throw PoolException("Connection pool timeout: all " + std::to_string(max_connections) +
 			                    " connections in use, waited " + std::to_string(timeout_ms) + "ms");
@@ -188,6 +197,14 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::TryAcquire() {
+	{
+		std::lock_guard<std::mutex> lock(pool_lock);
+		if (max_connections == 0) {
+			throw PoolException("Connection pool is disabled (pool_size=0). Use "
+			                    "the force acquire mode to create connections without pooling.");
+		}
+	}
+
 	auto tl_conn = TryAcquireFromThreadLocal();
 	if (tl_conn) {
 		return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(tl_conn));
@@ -244,9 +261,25 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::TryAcquire() {
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::ForceAcquire() {
+	// We return the thread-local connection even if the running pool was disabled
+	// by setting max_conn = 0.
 	auto tl_conn = TryAcquireFromThreadLocal();
 	if (tl_conn) {
 		return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(tl_conn));
+	}
+
+	bool pooling_disabled = false;
+	{
+		std::lock_guard<std::mutex> lock(pool_lock);
+		if (shutdown_flag) {
+			throw PoolException("Connection pool has been shut down");
+		}
+		pooling_disabled = (max_connections == 0);
+	}
+
+	if (pooling_disabled) {
+		auto conn = CreateNewConnection();
+		return PooledConnection<ConnectionT>(nullptr, std::move(conn));
 	}
 
 	{
