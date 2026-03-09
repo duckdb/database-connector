@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "dbconnector/pool/cached_connection.hpp"
+
 namespace dbconnector {
 namespace pool {
 
@@ -10,7 +12,7 @@ class ConnectionPool;
 
 template <typename ConnectionT>
 struct ThreadLocalConnectionCache {
-	std::unique_ptr<ConnectionT> connection;
+	CachedConnection<ConnectionT> cached_conn;
 	std::weak_ptr<ConnectionPool<ConnectionT>> owner;
 	bool available = false;
 

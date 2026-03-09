@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "connection_pool.hpp"
+#include "dbconnector/pool/connection_pool.hpp"
 
 namespace dbconnector {
 namespace pool {
@@ -12,10 +12,10 @@ namespace pool {
 template <typename ConnectionT>
 ThreadLocalConnectionCache<ConnectionT>::~ThreadLocalConnectionCache() {
 	auto pool = owner.lock();
-	if (pool && connection) {
-		pool->ReturnFromThreadLocalCache(std::move(connection));
+	if (pool && cached_conn) {
+		pool->ReturnFromThreadLocalCache(std::move(cached_conn));
 	}
-	connection.reset();
+	cached_conn.reset();
 	owner.reset();
 	available = false;
 }
@@ -23,10 +23,10 @@ ThreadLocalConnectionCache<ConnectionT>::~ThreadLocalConnectionCache() {
 template <typename ConnectionT>
 void ThreadLocalConnectionCache<ConnectionT>::Clear() {
 	auto pool = owner.lock();
-	if (connection && pool) {
-		pool->ReturnFromThreadLocalCache(std::move(connection));
+	if (cached_conn && pool) {
+		pool->ReturnFromThreadLocalCache(std::move(cached_conn));
 	}
-	connection = nullptr;
+	cached_conn.reset();
 	owner.reset();
 	available = false;
 }

@@ -2,20 +2,28 @@
 
 #include "pooled_connection.hpp"
 
-#include "connection_pool.hpp"
-#include "pool_exception.hpp"
+#include "dbconnector/pool/connection_pool.hpp"
+#include "dbconnector/pool/pool_exception.hpp"
 
 namespace dbconnector {
 namespace pool {
 
 template <typename ConnectionT>
-PooledConnection<ConnectionT>::PooledConnection() : pool(nullptr), connection(nullptr), valid(false) {
+PooledConnection<ConnectionT>::PooledConnection()
+    : pool(nullptr), connection(nullptr), valid(false), created_at(std::chrono::steady_clock::time_point()) {
 }
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(std::shared_ptr<ConnectionPool<ConnectionT>> pool_p,
-                                                std::unique_ptr<ConnectionT> connection_p)
-    : pool(std::move(pool_p)), connection(std::move(connection_p)), valid(true) {
+                                                std::unique_ptr<ConnectionT> connection_p,
+                                                std::chrono::steady_clock::time_point created_at_p)
+    : pool(std::move(pool_p)), connection(std::move(connection_p)), valid(true), created_at(created_at_p) {
+}
+
+template <typename ConnectionT>
+PooledConnection<ConnectionT>::PooledConnection(std::shared_ptr<ConnectionPool<ConnectionT>> pool_p,
+                                                CachedConnection<ConnectionT> cached_conn_p)
+    : PooledConnection<ConnectionT>(std::move(pool_p), cached_conn_p.TakeConnection(), cached_conn_p.GetCreatedAt()) {
 }
 
 template <typename ConnectionT>
@@ -25,7 +33,8 @@ PooledConnection<ConnectionT>::~PooledConnection() noexcept {
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(PooledConnection &&other) noexcept
-    : pool(std::move(other.pool)), connection(std::move(other.connection)), valid(other.valid) {
+    : pool(std::move(other.pool)), connection(std::move(other.connection)), valid(other.valid),
+      created_at(other.created_at) {
 	other.valid = false;
 }
 
@@ -33,9 +42,10 @@ template <typename ConnectionT>
 PooledConnection<ConnectionT> &PooledConnection<ConnectionT>::operator=(PooledConnection &&other) noexcept {
 	if (this != &other) {
 		ReturnToPool();
-		pool = std::move(other.pool);
-		connection = std::move(other.connection);
-		valid = other.valid;
+		this->pool = std::move(other.pool);
+		this->connection = std::move(other.connection);
+		this->valid = other.valid;
+		this->created_at = other.created_at;
 		other.valid = false;
 	}
 	return *this;
@@ -59,12 +69,17 @@ ConnectionT *PooledConnection<ConnectionT>::operator->() {
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT>::operator bool() const {
-	return connection != nullptr && valid;
+	return connection.get() != nullptr && valid;
 }
 
 template <typename ConnectionT>
 void PooledConnection<ConnectionT>::Invalidate() {
 	valid = false;
+}
+
+template <typename ConnectionT>
+std::chrono::steady_clock::time_point PooledConnection<ConnectionT>::GetCreatedAt() {
+	return created_at;
 }
 
 template <typename ConnectionT>
@@ -74,7 +89,7 @@ void PooledConnection<ConnectionT>::ReturnToPool() noexcept {
 	}
 	try {
 		if (valid) {
-			pool->Return(std::move(connection));
+			pool->Return(std::move(connection), created_at);
 		} else {
 			pool->Discard();
 		}
