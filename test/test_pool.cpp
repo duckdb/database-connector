@@ -28,8 +28,12 @@ public:
 class TestConnectionPool : public dbconnector::pool::ConnectionPool<TestConnection> {
 public:
 	TestConnectionPool(size_t max_connections = DEFAULT_POOL_SIZE, size_t timeout_ms = DEFAULT_POOL_TIMEOUT_MS,
-	                   bool thread_local_cache_enabled = true)
-	    : dbconnector::pool::ConnectionPool<TestConnection>(max_connections, timeout_ms, thread_local_cache_enabled) {
+	                   bool tl_cache_enabled = true)
+	    : dbconnector::pool::ConnectionPool<TestConnection>(
+	          max_connections, timeout_ms,
+	          tl_cache_enabled
+	              ? dbconnector::pool::ConnectionPool<TestConnection>::ThreadLocalCacheState::CACHE_ENABLED
+	              : dbconnector::pool::ConnectionPool<TestConnection>::ThreadLocalCacheState::CACHE_DISABLED) {
 	}
 
 protected:
@@ -48,9 +52,9 @@ protected:
 
 TEST_CASE("Test connection pool basic", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>();
-	REQUIRE(!!pool->Acquire());
-	REQUIRE(!!pool->TryAcquire());
-	REQUIRE(!!pool->ForceAcquire());
+	REQUIRE(pool->Acquire());
+	REQUIRE(pool->TryAcquire());
+	REQUIRE(pool->ForceAcquire());
 }
 
 TEST_CASE("Test pool size no thread-local", group_name) {
@@ -205,4 +209,70 @@ TEST_CASE("Test pool disable running", group_name) {
 		REQUIRE(pool->GetTotalConnections() == 0);
 	}
 	REQUIRE(pool->GetTotalConnections() == 0);
+}
+
+TEST_CASE("Test pool with a reaper", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
+	REQUIRE(!pool->EnsureReaperRunning());
+	pool->SetMaxLifetimeSeconds(1);
+	REQUIRE(pool->EnsureReaperRunning());
+	REQUIRE(pool->EnsureReaperRunning());
+
+	{
+		auto conn = pool->Acquire();
+		REQUIRE(conn);
+		REQUIRE(1 == pool->GetTotalConnections());
+	}
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	REQUIRE(0 == pool->GetTotalConnections());
+
+	pool->SetIdleTimeoutSeconds(1);
+	pool->SetMaxLifetimeSeconds(0);
+
+	{
+		auto conn = pool->Acquire();
+		REQUIRE(conn);
+		REQUIRE(1 == pool->GetTotalConnections());
+	}
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	REQUIRE(0 == pool->GetTotalConnections());
+}
+
+TEST_CASE("Test pool with a reaper restart", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
+	REQUIRE(!pool->EnsureReaperRunning());
+	pool->SetMaxLifetimeSeconds(1);
+	REQUIRE(pool->EnsureReaperRunning());
+	pool->ShutdownReaper();
+
+	{
+		auto conn = pool->Acquire();
+		REQUIRE(conn);
+		REQUIRE(1 == pool->GetTotalConnections());
+	}
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	REQUIRE(pool->EnsureReaperRunning());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	REQUIRE(1 == pool->GetTotalConnections());
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+	REQUIRE(0 == pool->GetTotalConnections());
 }
