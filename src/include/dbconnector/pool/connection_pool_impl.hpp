@@ -13,9 +13,9 @@ namespace dbconnector {
 namespace pool {
 
 template <typename ConnectionT>
-ConnectionPool<ConnectionT>::ConnectionPool(size_t max_connections_p, size_t timeout_ms_p,
+ConnectionPool<ConnectionT>::ConnectionPool(uint64_t max_connections_p, uint64_t timeout_ms_p,
                                             ThreadLocalCacheState tl_cache_state)
-    : max_connections(max_connections_p), timeout_ms(timeout_ms_p), total_connections(0), shutdown_flag(false),
+    : max_connections(max_connections_p), wait_timeout_ms(timeout_ms_p), total_connections(0), shutdown_flag(false),
       tl_cache_enabled(ThreadLocalCacheState::CACHE_ENABLED == tl_cache_state) {
 }
 
@@ -29,11 +29,12 @@ void ConnectionPool<ConnectionT>::Shutdown() {
 	{
 		std::unique_lock<std::mutex> lock(pool_lock);
 		ShutdownReaperInternal(lock);
-		if (shutdown_flag) {
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
 			return;
 		}
-		shutdown_flag = true;
+		shutdown_flag.store(true, std::memory_order_relaxed);
 		available.clear();
+		available_connections.store(available.size(), std::memory_order_relaxed);
 	}
 	pool_cv.notify_all();
 	//! Other threads' TL caches self-cleanup via ThreadLocalConnectionCache destructors
@@ -42,8 +43,7 @@ void ConnectionPool<ConnectionT>::Shutdown() {
 
 template <typename ConnectionT>
 bool ConnectionPool<ConnectionT>::IsShutdown() const {
-	std::lock_guard<std::mutex> lock(pool_lock);
-	return shutdown_flag;
+	return shutdown_flag.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
@@ -104,10 +104,11 @@ bool ConnectionPool<ConnectionT>::TryReturnToThreadLocal(std::unique_ptr<Connect
 	}
 
 	std::lock_guard<std::mutex> lock(pool_lock);
-	if (shutdown_flag) {
+	if (shutdown_flag.load(std::memory_order_relaxed)) {
 		return false;
 	}
-	if (total_connections >= max_connections && available.empty()) {
+	if (total_connections.load(std::memory_order_relaxed) >= max_connections.load(std::memory_order_relaxed) &&
+	    available.empty()) {
 		return false;
 	}
 	cache.cached_conn = CachedConnection<ConnectionT>(std::move(conn), created_at, returned_at);
@@ -127,22 +128,21 @@ void ConnectionPool<ConnectionT>::ReturnFromThreadLocalCache(CachedConnection<Co
 
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (expired || shutdown_flag) {
-			if (total_connections > 0) {
-				total_connections--;
-			}
+		if (expired || shutdown_flag.load(std::memory_order_relaxed)) {
+			DecrementTotalConnections();
 			return;
 		}
 		available.emplace_back(std::move(cached_conn));
+		available_connections.store(available.size(), std::memory_order_relaxed);
 	}
 	pool_cv.notify_one();
 }
 
 template <typename ConnectionT>
-PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
+PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::WaitAcquire() {
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (max_connections == 0) {
+		if (max_connections.load(std::memory_order_relaxed) == 0) {
 			throw PoolException("Connection pool is disabled (pool_size=0). Use "
 			                    "the force acquire mode to create connections without pooling.");
 		}
@@ -156,37 +156,35 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
 
 	std::unique_lock<std::mutex> lock(pool_lock);
 
-	auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+	auto deadline =
+	    std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_timeout_ms.load(std::memory_order_relaxed));
 
 	while (true) {
-		if (shutdown_flag) {
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
 			throw PoolException("Connection pool has been shut down");
 		}
 
 		while (!available.empty()) {
 			auto cached_conn = std::move(available.front());
 			available.pop_front();
+			available_connections.store(available.size(), std::memory_order_relaxed);
 
 			now = GetNowForTimeoutPurposes();
 			bool healthy = CheckConnectionNotExpiredAndHealthy(lock, cached_conn, now);
 
-			if (shutdown_flag) {
-				if (total_connections > 0) {
-					total_connections--;
-				}
+			if (shutdown_flag.load(std::memory_order_relaxed)) {
+				DecrementTotalConnections();
 				throw PoolException("Connection pool has been shut down");
 			}
 
 			if (healthy) {
 				return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(cached_conn));
 			}
-			if (total_connections > 0) {
-				total_connections--;
-			}
+			DecrementTotalConnections();
 		}
 
-		if (total_connections < max_connections) {
-			total_connections++;
+		if (total_connections.load(std::memory_order_relaxed) < max_connections.load(std::memory_order_relaxed)) {
+			total_connections.fetch_add(1, std::memory_order_relaxed);
 			lock.unlock();
 
 			try {
@@ -194,9 +192,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
 				return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(conn), now);
 			} catch (...) {
 				lock.lock();
-				if (total_connections > 0) {
-					total_connections--;
-				}
+				DecrementTotalConnections();
 				pool_cv.notify_one();
 				throw;
 			}
@@ -204,8 +200,10 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::Acquire() {
 
 		// Spurious wakeups re-evaluate all conditions above. The deadline is not reset.
 		if (pool_cv.wait_until(lock, deadline) == std::cv_status::timeout) {
-			throw PoolException("Connection pool timeout: all " + std::to_string(max_connections) +
-			                    " connections in use, waited " + std::to_string(timeout_ms) + "ms");
+			throw PoolException("Connection pool timeout: all " +
+			                    std::to_string(max_connections.load(std::memory_order_relaxed)) +
+			                    " connections in use, waited " +
+			                    std::to_string(wait_timeout_ms.load(std::memory_order_relaxed)) + "ms");
 		}
 	}
 }
@@ -214,7 +212,7 @@ template <typename ConnectionT>
 PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::TryAcquire() {
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (max_connections == 0) {
+		if (max_connections.load(std::memory_order_relaxed) == 0) {
 			throw PoolException("Connection pool is disabled (pool_size=0). Use "
 			                    "the force acquire mode to create connections without pooling.");
 		}
@@ -229,33 +227,30 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::TryAcquire() {
 
 	std::unique_lock<std::mutex> lock(pool_lock);
 
-	if (shutdown_flag) {
+	if (shutdown_flag.load(std::memory_order_relaxed)) {
 		return PooledConnection<ConnectionT>();
 	}
 
 	while (!available.empty()) {
 		auto cached_conn = std::move(available.front());
 		available.pop_front();
+		available_connections.store(available.size(), std::memory_order_relaxed);
 
 		bool healthy = CheckConnectionNotExpiredAndHealthy(lock, cached_conn, now);
 
-		if (shutdown_flag) {
-			if (total_connections > 0) {
-				total_connections--;
-			}
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
+			DecrementTotalConnections();
 			return PooledConnection<ConnectionT>();
 		}
 
 		if (healthy) {
 			return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(cached_conn));
 		}
-		if (total_connections > 0) {
-			total_connections--;
-		}
+		DecrementTotalConnections();
 	}
 
-	if (total_connections < max_connections) {
-		total_connections++;
+	if (total_connections.load(std::memory_order_relaxed) < max_connections.load(std::memory_order_relaxed)) {
+		total_connections.fetch_add(1, std::memory_order_relaxed);
 		lock.unlock();
 
 		try {
@@ -263,9 +258,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::TryAcquire() {
 			return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(conn), now);
 		} catch (...) {
 			lock.lock();
-			if (total_connections > 0) {
-				total_connections--;
-			}
+			DecrementTotalConnections();
 			pool_cv.notify_one();
 			throw;
 		}
@@ -288,10 +281,10 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::ForceAcquire() {
 	bool pooling_disabled = false;
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (shutdown_flag) {
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
 			throw PoolException("Connection pool has been shut down");
 		}
-		pooling_disabled = (max_connections == 0);
+		pooling_disabled = (max_connections.load(std::memory_order_relaxed) == 0);
 	}
 
 	if (pooling_disabled) {
@@ -302,32 +295,29 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::ForceAcquire() {
 	{
 		std::unique_lock<std::mutex> lock(pool_lock);
 
-		if (shutdown_flag) {
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
 			throw PoolException("Connection pool has been shut down");
 		}
 
 		while (!available.empty()) {
 			auto cached_conn = std::move(available.front());
 			available.pop_front();
+			available_connections.store(available.size(), std::memory_order_relaxed);
 
 			bool healthy = CheckConnectionNotExpiredAndHealthy(lock, cached_conn, now);
 
-			if (shutdown_flag) {
-				if (total_connections > 0) {
-					total_connections--;
-				}
+			if (shutdown_flag.load(std::memory_order_relaxed)) {
+				DecrementTotalConnections();
 				throw PoolException("Connection pool has been shut down");
 			}
 
 			if (healthy) {
 				return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(cached_conn));
 			}
-			if (total_connections > 0) {
-				total_connections--;
-			}
+			DecrementTotalConnections();
 		}
 
-		total_connections++;
+		total_connections.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	try {
@@ -335,9 +325,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::ForceAcquire() {
 		return PooledConnection<ConnectionT>(this->shared_from_this(), std::move(conn), now);
 	} catch (...) {
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (total_connections > 0) {
-			total_connections--;
-		}
+		DecrementTotalConnections();
 		pool_cv.notify_one();
 		throw;
 	}
@@ -377,20 +365,17 @@ void ConnectionPool<ConnectionT>::Return(std::unique_ptr<ConnectionT> conn,
 
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (shutdown_flag) {
-			if (total_connections > 0) {
-				total_connections--;
-			}
+		if (shutdown_flag.load(std::memory_order_relaxed)) {
+			DecrementTotalConnections();
 			return;
 		}
-		if (total_connections > max_connections) {
-			if (total_connections > 0) {
-				total_connections--;
-			}
+		if (total_connections.load(std::memory_order_relaxed) > max_connections.load(std::memory_order_relaxed)) {
+			DecrementTotalConnections();
 			return;
 		}
 		CachedConnection<ConnectionT> cached_conn(std::move(conn), created_at, now);
 		available.emplace_back(std::move(cached_conn));
+		available_connections.store(available.size(), std::memory_order_relaxed);
 	}
 	pool_cv.notify_one();
 }
@@ -399,44 +384,52 @@ template <typename ConnectionT>
 void ConnectionPool<ConnectionT>::Discard() {
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		if (total_connections > 0) {
-			total_connections--;
-		}
+		DecrementTotalConnections();
 	}
 	pool_cv.notify_one();
 }
 
 template <typename ConnectionT>
-void ConnectionPool<ConnectionT>::SetMaxConnections(size_t new_max) {
+uint64_t ConnectionPool<ConnectionT>::GetMaxConnections() const {
+	return max_connections.load(std::memory_order_relaxed);
+}
+
+template <typename ConnectionT>
+void ConnectionPool<ConnectionT>::SetMaxConnections(uint64_t new_max) {
 	std::deque<CachedConnection<ConnectionT>> to_evict;
 	{
 		std::lock_guard<std::mutex> lock(pool_lock);
-		max_connections = new_max;
-		while (!available.empty() && total_connections > max_connections) {
+		this->max_connections.store(new_max, std::memory_order_relaxed);
+		while (!available.empty() &&
+		       total_connections.load(std::memory_order_relaxed) > max_connections.load(std::memory_order_relaxed)) {
 			to_evict.push_back(std::move(available.back()));
 			available.pop_back();
-			total_connections--;
+			available_connections.store(available.size(), std::memory_order_relaxed);
+			DecrementTotalConnections();
 		}
 	}
 	pool_cv.notify_all();
 }
 
 template <typename ConnectionT>
-size_t ConnectionPool<ConnectionT>::GetMaxConnections() const {
-	std::lock_guard<std::mutex> lock(pool_lock);
-	return max_connections;
+uint64_t ConnectionPool<ConnectionT>::GetWaitTimeoutMs() const {
+	return wait_timeout_ms.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-size_t ConnectionPool<ConnectionT>::GetAvailableConnections() const {
+void ConnectionPool<ConnectionT>::SetWaitTimeoutMs(uint64_t timeout_ms) {
 	std::lock_guard<std::mutex> lock(pool_lock);
-	return available.size();
+	wait_timeout_ms.store(timeout_ms, std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-size_t ConnectionPool<ConnectionT>::GetTotalConnections() const {
-	std::lock_guard<std::mutex> lock(pool_lock);
-	return total_connections;
+uint64_t ConnectionPool<ConnectionT>::GetAvailableConnections() const {
+	return available_connections.load(std::memory_order_relaxed);
+}
+
+template <typename ConnectionT>
+uint64_t ConnectionPool<ConnectionT>::GetTotalConnections() const {
+	return total_connections.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
@@ -576,13 +569,12 @@ void ConnectionPool<ConnectionT>::ReaperLoop() {
 			    TimePointExpired(cached_conn.GetReturnedAt(), idle_timeout_val, now)) {
 				expired.emplace_back(std::move(cached_conn));
 				it = available.erase(it); // erase returns iterator to next element
-				if (total_connections > 0) {
-					total_connections--;
-				}
+				DecrementTotalConnections();
 			} else {
 				++it;
 			}
 		}
+		available_connections.store(available.size(), std::memory_order_relaxed);
 
 		if (expired.size() > 0) {
 			// release lock while destroying expired connections
@@ -602,7 +594,7 @@ bool ConnectionPool<ConnectionT>::EnsureReaperRunning() {
 
 	std::unique_lock<std::mutex> lock(pool_lock);
 
-	if (shutdown_flag) {
+	if (shutdown_flag.load(std::memory_order_relaxed)) {
 		return false;
 	}
 
@@ -651,12 +643,12 @@ void ConnectionPool<ConnectionT>::ShutdownReaper() {
 }
 
 template <typename ConnectionT>
-size_t ConnectionPool<ConnectionT>::GetThreadLocalCacheHits() const {
+uint64_t ConnectionPool<ConnectionT>::GetThreadLocalCacheHits() const {
 	return tl_cache_hits.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-size_t ConnectionPool<ConnectionT>::GetThreadLocalCacheMisses() const {
+uint64_t ConnectionPool<ConnectionT>::GetThreadLocalCacheMisses() const {
 	return tl_cache_misses.load(std::memory_order_relaxed);
 }
 
@@ -676,6 +668,15 @@ void ConnectionPool<ConnectionT>::ForEachIdleConnection(Fn &&fn) {
 	std::lock_guard<std::mutex> lock(pool_lock);
 	for (auto &cached_conn : available) {
 		fn(cached_conn.GetConnection());
+	}
+}
+
+template <typename ConnectionT>
+void ConnectionPool<ConnectionT>::DecrementTotalConnections() {
+	// Note, this function is only called when holding the lock
+	// it is not supposed to be atomic.
+	if (total_connections.load(std::memory_order_relaxed) > 0) {
+		total_connections.fetch_sub(1, std::memory_order_relaxed);
 	}
 }
 

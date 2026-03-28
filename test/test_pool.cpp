@@ -52,16 +52,29 @@ protected:
 
 TEST_CASE("Test connection pool basic", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>();
-	REQUIRE(pool->Acquire());
+	REQUIRE(pool->WaitAcquire());
 	REQUIRE(pool->TryAcquire());
 	REQUIRE(pool->ForceAcquire());
+	pool->SetMaxConnections(42);
+	REQUIRE(pool->GetMaxConnections() == 42);
+	pool->SetWaitTimeoutMs(43);
+	REQUIRE(pool->GetWaitTimeoutMs() == 43);
+	REQUIRE(pool->GetAvailableConnections() == 0);
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->IsThreadLocalCacheEnabled());
+	pool->SetThreadLocalCacheEnabled(false);
+	REQUIRE(!pool->IsThreadLocalCacheEnabled());
+	pool->SetMaxLifetimeSeconds(44);
+	REQUIRE(pool->GetMaxLifetimeSeconds() == 44);
+	pool->SetIdleTimeoutSeconds(45);
+	REQUIRE(pool->GetIdleTimeoutSeconds() == 45);
 }
 
 TEST_CASE("Test pool size no thread-local", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(2, 500, false);
 
 	{
-		auto conn_main = pool->Acquire();
+		auto conn_main = pool->WaitAcquire();
 		REQUIRE(conn_main);
 		REQUIRE(1 == pool->GetTotalConnections());
 	}
@@ -83,7 +96,7 @@ TEST_CASE("Test pool size no thread-local", group_name) {
 
 	bool timeout_thrown = false;
 	try {
-		auto conn_main = pool->Acquire();
+		auto conn_main = pool->WaitAcquire();
 	} catch (const std::exception &e) {
 		REQUIRE(0 == std::string(e.what()).find("Connection pool timeout"));
 		timeout_thrown = true;
@@ -119,7 +132,7 @@ TEST_CASE("Test pool size with thread-local", group_name) {
 	REQUIRE(3 == pool->GetTotalConnections());
 
 	{
-		auto conn_main = pool->Acquire();
+		auto conn_main = pool->WaitAcquire();
 		REQUIRE(conn_main);
 		REQUIRE(conn_main.GetConnection().GetId() == conn_main_id);
 		REQUIRE(3 == pool->GetTotalConnections());
@@ -130,7 +143,7 @@ TEST_CASE("Test pool size with thread-local", group_name) {
 TEST_CASE("Test pool disabled", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(0);
 
-	REQUIRE_THROWS(pool->Acquire());
+	REQUIRE_THROWS(pool->WaitAcquire());
 	REQUIRE_THROWS(pool->TryAcquire());
 
 	uint64_t conn1_id = 0;
@@ -172,7 +185,7 @@ TEST_CASE("Test pool disable running", group_name) {
 	REQUIRE(pool->GetAvailableConnections() == 1);
 
 	pool->SetMaxConnections(0);
-	REQUIRE_THROWS(pool->Acquire());
+	REQUIRE_THROWS(pool->WaitAcquire());
 	REQUIRE_THROWS(pool->TryAcquire());
 
 	REQUIRE(pool->GetTotalConnections() == 2);
@@ -219,7 +232,7 @@ TEST_CASE("Test pool with a reaper", group_name) {
 	REQUIRE(pool->EnsureReaperRunning());
 
 	{
-		auto conn = pool->Acquire();
+		auto conn = pool->WaitAcquire();
 		REQUIRE(conn);
 		REQUIRE(1 == pool->GetTotalConnections());
 	}
@@ -235,7 +248,7 @@ TEST_CASE("Test pool with a reaper", group_name) {
 	pool->SetMaxLifetimeSeconds(0);
 
 	{
-		auto conn = pool->Acquire();
+		auto conn = pool->WaitAcquire();
 		REQUIRE(conn);
 		REQUIRE(1 == pool->GetTotalConnections());
 	}
@@ -256,7 +269,7 @@ TEST_CASE("Test pool with a reaper restart", group_name) {
 	pool->ShutdownReaper();
 
 	{
-		auto conn = pool->Acquire();
+		auto conn = pool->WaitAcquire();
 		REQUIRE(conn);
 		REQUIRE(1 == pool->GetTotalConnections());
 	}
