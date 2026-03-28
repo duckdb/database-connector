@@ -18,44 +18,45 @@ namespace pool {
 template <typename ConnectionT>
 class ConnectionPool : public std::enable_shared_from_this<ConnectionPool<ConnectionT>> {
 public:
-	static constexpr size_t DEFAULT_POOL_SIZE = 4;
-	static constexpr size_t DEFAULT_POOL_TIMEOUT_MS = 30000;
+	static constexpr uint64_t DEFAULT_POOL_SIZE = 4;
+	static constexpr uint64_t DEFAULT_POOL_TIMEOUT_MS = 30000;
 
 	enum class ThreadLocalCacheState {
 		CACHE_ENABLED,
 		CACHE_DISABLED,
 	};
 
-	ConnectionPool(size_t max_connections = DEFAULT_POOL_SIZE, size_t timeout_ms = DEFAULT_POOL_TIMEOUT_MS,
+	ConnectionPool(uint64_t max_connections = DEFAULT_POOL_SIZE, uint64_t wait_timeout_ms = DEFAULT_POOL_TIMEOUT_MS,
 	               ThreadLocalCacheState tl_cache_state = ThreadLocalCacheState::CACHE_DISABLED);
 	virtual ~ConnectionPool();
 
-	PooledConnection<ConnectionT> Acquire();
+	PooledConnection<ConnectionT> WaitAcquire();
 	PooledConnection<ConnectionT> TryAcquire();
 	PooledConnection<ConnectionT> ForceAcquire();
 
-	void Return(std::unique_ptr<ConnectionT> conn, std::chrono::steady_clock::time_point created_at);
-	void Discard();
+	bool IsShutdown() const;
 	void Shutdown();
 
-	void SetMaxConnections(size_t new_max);
-	size_t GetMaxConnections() const;
-	size_t GetAvailableConnections() const;
-	size_t GetTotalConnections() const;
-	bool IsShutdown() const;
+	uint64_t GetMaxConnections() const;
+	void SetMaxConnections(uint64_t new_max);
+	uint64_t GetWaitTimeoutMs() const;
+	void SetWaitTimeoutMs(uint64_t timeout_ms);
 
-	void SetMaxLifetimeSeconds(uint64_t new_max_lifetime_seconds);
+	uint64_t GetAvailableConnections() const;
+	uint64_t GetTotalConnections() const;
+
+	bool IsThreadLocalCacheEnabled() const;
+	void SetThreadLocalCacheEnabled(bool enabled);
+	uint64_t GetThreadLocalCacheHits() const;
+	uint64_t GetThreadLocalCacheMisses() const;
+
 	uint64_t GetMaxLifetimeSeconds() const;
-	void SetIdleTimeoutSeconds(uint64_t new_idle_timeout_seconds);
+	void SetMaxLifetimeSeconds(uint64_t new_max_lifetime_seconds);
 	uint64_t GetIdleTimeoutSeconds() const;
+	void SetIdleTimeoutSeconds(uint64_t new_idle_timeout_seconds);
 
 	bool EnsureReaperRunning();
 	void ShutdownReaper();
-
-	size_t GetThreadLocalCacheHits() const;
-	size_t GetThreadLocalCacheMisses() const;
-	void SetThreadLocalCacheEnabled(bool enabled);
-	bool IsThreadLocalCacheEnabled() const;
 
 protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
@@ -71,12 +72,16 @@ protected:
 	void ForEachIdleConnection(Fn &&fn);
 
 private:
+	friend class PooledConnection<ConnectionT>;
 	friend struct ThreadLocalConnectionCache<ConnectionT>;
 
 	static ThreadLocalConnectionCache<ConnectionT> &GetThreadLocalCache() {
 		static thread_local ThreadLocalConnectionCache<ConnectionT> cache;
 		return cache;
 	}
+
+	void Return(std::unique_ptr<ConnectionT> conn, std::chrono::steady_clock::time_point created_at);
+	void Discard();
 
 	bool TimeoutEnabled() const;
 	std::chrono::steady_clock::time_point GetNowForTimeoutPurposes();
@@ -96,15 +101,18 @@ private:
 	                            std::chrono::steady_clock::time_point returned_at);
 	void ReturnFromThreadLocalCache(CachedConnection<ConnectionT> cached_conn);
 
-	size_t max_connections = 0;
-	size_t timeout_ms = 0;
+	void DecrementTotalConnections();
+
+	std::atomic<uint64_t> max_connections {0};
+	std::atomic<uint64_t> wait_timeout_ms {0};
 
 	mutable std::mutex pool_lock;
 	std::condition_variable pool_cv;
 
 	std::deque<CachedConnection<ConnectionT>> available;
-	size_t total_connections = 0;
-	bool shutdown_flag = false;
+	std::atomic<uint64_t> available_connections {0};
+	std::atomic<uint64_t> total_connections {0};
+	std::atomic<bool> shutdown_flag {false};
 
 	std::atomic<uint64_t> max_lifetime_seconds {0};
 	std::atomic<uint64_t> idle_timeout_seconds {0};
@@ -113,9 +121,9 @@ private:
 	std::condition_variable reaper_cv;
 	std::atomic<bool> reaper_shutdown_flag {false};
 
-	std::atomic<bool> tl_cache_enabled;
-	std::atomic<size_t> tl_cache_hits {0};
-	std::atomic<size_t> tl_cache_misses {0};
+	std::atomic<bool> tl_cache_enabled {false};
+	std::atomic<uint64_t> tl_cache_hits {0};
+	std::atomic<uint64_t> tl_cache_misses {0};
 };
 
 } // namespace pool
