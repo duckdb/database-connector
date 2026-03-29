@@ -57,17 +57,17 @@ TEST_CASE("Test connection pool basic", group_name) {
 	REQUIRE(pool->ForceAcquire());
 	pool->SetMaxConnections(42);
 	REQUIRE(pool->GetMaxConnections() == 42);
-	pool->SetWaitTimeoutMs(43);
-	REQUIRE(pool->GetWaitTimeoutMs() == 43);
+	pool->SetWaitTimeoutMillis(43);
+	REQUIRE(pool->GetWaitTimeoutMillis() == 43);
 	REQUIRE(pool->GetAvailableConnections() == 0);
 	REQUIRE(pool->GetTotalConnections() == 1);
 	REQUIRE(pool->IsThreadLocalCacheEnabled());
 	pool->SetThreadLocalCacheEnabled(false);
 	REQUIRE(!pool->IsThreadLocalCacheEnabled());
-	pool->SetMaxLifetimeSeconds(44);
-	REQUIRE(pool->GetMaxLifetimeSeconds() == 44);
-	pool->SetIdleTimeoutSeconds(45);
-	REQUIRE(pool->GetIdleTimeoutSeconds() == 45);
+	pool->SetMaxLifetimeMillis(44);
+	REQUIRE(pool->GetMaxLifetimeMillis() == 44);
+	pool->SetIdleTimeoutMillis(45);
+	REQUIRE(pool->GetIdleTimeoutMillis() == 45);
 }
 
 TEST_CASE("Test pool size no thread-local", group_name) {
@@ -227,7 +227,7 @@ TEST_CASE("Test pool disable running", group_name) {
 TEST_CASE("Test pool with a reaper", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
 	REQUIRE(!pool->EnsureReaperRunning());
-	pool->SetMaxLifetimeSeconds(1);
+	pool->SetMaxLifetimeMillis(1000);
 	REQUIRE(pool->EnsureReaperRunning());
 	REQUIRE(pool->EnsureReaperRunning());
 
@@ -244,8 +244,8 @@ TEST_CASE("Test pool with a reaper", group_name) {
 	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 	REQUIRE(0 == pool->GetTotalConnections());
 
-	pool->SetIdleTimeoutSeconds(1);
-	pool->SetMaxLifetimeSeconds(0);
+	pool->SetIdleTimeoutMillis(1000);
+	pool->SetMaxLifetimeMillis(0);
 
 	{
 		auto conn = pool->WaitAcquire();
@@ -264,7 +264,7 @@ TEST_CASE("Test pool with a reaper", group_name) {
 TEST_CASE("Test pool with a reaper restart", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
 	REQUIRE(!pool->EnsureReaperRunning());
-	pool->SetMaxLifetimeSeconds(1);
+	pool->SetMaxLifetimeMillis(1000);
 	REQUIRE(pool->EnsureReaperRunning());
 	pool->ShutdownReaper();
 
