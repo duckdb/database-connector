@@ -7,16 +7,20 @@
 #include "dbconnector/defer.hpp"
 
 #include "dbconnector/pool/connection_pool.hpp"
+#include "dbconnector/pool/connection_pool_config.hpp"
 #include "dbconnector/pool/pool_exception.hpp"
 
 namespace dbconnector {
 namespace pool {
 
 template <typename ConnectionT>
-ConnectionPool<ConnectionT>::ConnectionPool(uint64_t max_connections_p, uint64_t timeout_millis_p,
-                                            ThreadLocalCacheState tl_cache_state)
-    : max_connections(max_connections_p), wait_timeout_millis(timeout_millis_p), total_connections(0),
-      shutdown_flag(false), tl_cache_enabled(ThreadLocalCacheState::CACHE_ENABLED == tl_cache_state) {
+ConnectionPool<ConnectionT>::ConnectionPool(ConnectionPoolConfig config)
+    : max_connections(config.max_connections), wait_timeout_millis(config.wait_timeout_millis),
+      max_lifetime_millis(config.max_lifetime_millis), idle_timeout_millis(config.idle_timeout_millis),
+      tl_cache_enabled(config.tl_cache_enabled) {
+	if (config.start_reaper_thread) {
+		EnsureReaperRunning();
+	}
 }
 
 template <typename ConnectionT>
