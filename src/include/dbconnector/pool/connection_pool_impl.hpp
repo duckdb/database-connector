@@ -13,10 +13,10 @@ namespace dbconnector {
 namespace pool {
 
 template <typename ConnectionT>
-ConnectionPool<ConnectionT>::ConnectionPool(uint64_t max_connections_p, uint64_t timeout_ms_p,
+ConnectionPool<ConnectionT>::ConnectionPool(uint64_t max_connections_p, uint64_t timeout_millis_p,
                                             ThreadLocalCacheState tl_cache_state)
-    : max_connections(max_connections_p), wait_timeout_ms(timeout_ms_p), total_connections(0), shutdown_flag(false),
-      tl_cache_enabled(ThreadLocalCacheState::CACHE_ENABLED == tl_cache_state) {
+    : max_connections(max_connections_p), wait_timeout_millis(timeout_millis_p), total_connections(0),
+      shutdown_flag(false), tl_cache_enabled(ThreadLocalCacheState::CACHE_ENABLED == tl_cache_state) {
 }
 
 template <typename ConnectionT>
@@ -156,8 +156,8 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::WaitAcquire() {
 
 	std::unique_lock<std::mutex> lock(pool_lock);
 
-	auto deadline =
-	    std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_timeout_ms.load(std::memory_order_relaxed));
+	auto deadline = std::chrono::steady_clock::now() +
+	                std::chrono::milliseconds(wait_timeout_millis.load(std::memory_order_relaxed));
 
 	while (true) {
 		if (shutdown_flag.load(std::memory_order_relaxed)) {
@@ -203,7 +203,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::WaitAcquire() {
 			throw PoolException("Connection pool timeout: all " +
 			                    std::to_string(max_connections.load(std::memory_order_relaxed)) +
 			                    " connections in use, waited " +
-			                    std::to_string(wait_timeout_ms.load(std::memory_order_relaxed)) + "ms");
+			                    std::to_string(wait_timeout_millis.load(std::memory_order_relaxed)) + "ms");
 		}
 	}
 }
@@ -412,14 +412,14 @@ void ConnectionPool<ConnectionT>::SetMaxConnections(uint64_t new_max) {
 }
 
 template <typename ConnectionT>
-uint64_t ConnectionPool<ConnectionT>::GetWaitTimeoutMs() const {
-	return wait_timeout_ms.load(std::memory_order_relaxed);
+uint64_t ConnectionPool<ConnectionT>::GetWaitTimeoutMillis() const {
+	return wait_timeout_millis.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-void ConnectionPool<ConnectionT>::SetWaitTimeoutMs(uint64_t timeout_ms) {
+void ConnectionPool<ConnectionT>::SetWaitTimeoutMillis(uint64_t timeout_millis) {
 	std::lock_guard<std::mutex> lock(pool_lock);
-	wait_timeout_ms.store(timeout_ms, std::memory_order_relaxed);
+	wait_timeout_millis.store(timeout_millis, std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
@@ -433,31 +433,31 @@ uint64_t ConnectionPool<ConnectionT>::GetTotalConnections() const {
 }
 
 template <typename ConnectionT>
-void ConnectionPool<ConnectionT>::SetMaxLifetimeSeconds(uint64_t new_max_lifetime_seconds) {
-	this->max_lifetime_seconds.store(new_max_lifetime_seconds, std::memory_order_relaxed);
+void ConnectionPool<ConnectionT>::SetMaxLifetimeMillis(uint64_t new_max_lifetime_millis) {
+	this->max_lifetime_millis.store(new_max_lifetime_millis, std::memory_order_relaxed);
 	reaper_cv.notify_all();
 }
 
 template <typename ConnectionT>
-uint64_t ConnectionPool<ConnectionT>::GetMaxLifetimeSeconds() const {
-	return max_lifetime_seconds.load(std::memory_order_relaxed);
+uint64_t ConnectionPool<ConnectionT>::GetMaxLifetimeMillis() const {
+	return max_lifetime_millis.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
-void ConnectionPool<ConnectionT>::SetIdleTimeoutSeconds(uint64_t new_idle_timeout_seconds) {
-	this->idle_timeout_seconds.store(new_idle_timeout_seconds, std::memory_order_relaxed);
+void ConnectionPool<ConnectionT>::SetIdleTimeoutMillis(uint64_t new_idle_timeout_millis) {
+	this->idle_timeout_millis.store(new_idle_timeout_millis, std::memory_order_relaxed);
 	reaper_cv.notify_all();
 }
 
 template <typename ConnectionT>
-uint64_t ConnectionPool<ConnectionT>::GetIdleTimeoutSeconds() const {
-	return idle_timeout_seconds.load(std::memory_order_relaxed);
+uint64_t ConnectionPool<ConnectionT>::GetIdleTimeoutMillis() const {
+	return idle_timeout_millis.load(std::memory_order_relaxed);
 }
 
 template <typename ConnectionT>
 bool ConnectionPool<ConnectionT>::TimeoutEnabled() const {
-	return max_lifetime_seconds.load(std::memory_order_relaxed) > 0 ||
-	       idle_timeout_seconds.load(std::memory_order_relaxed) > 0;
+	return max_lifetime_millis.load(std::memory_order_relaxed) > 0 ||
+	       idle_timeout_millis.load(std::memory_order_relaxed) > 0;
 }
 
 template <typename ConnectionT>
@@ -470,17 +470,17 @@ std::chrono::steady_clock::time_point ConnectionPool<ConnectionT>::GetNowForTime
 }
 
 template <typename ConnectionT>
-bool ConnectionPool<ConnectionT>::TimePointExpired(std::chrono::steady_clock::time_point point, uint64_t timeout,
+bool ConnectionPool<ConnectionT>::TimePointExpired(std::chrono::steady_clock::time_point point, uint64_t timeout_millis,
                                                    std::chrono::steady_clock::time_point now) {
 	if (now.time_since_epoch() == std::chrono::steady_clock::duration::zero()) {
 		return false;
 	}
-	if (timeout == 0) {
+	if (timeout_millis == 0) {
 		return false;
 	}
-	int64_t age_signed = std::chrono::duration_cast<std::chrono::seconds>(now - point).count();
-	uint64_t age = age_signed > 0 ? static_cast<uint64_t>(age_signed) : 0;
-	return age >= timeout;
+	int64_t age_signed_millis = std::chrono::duration_cast<std::chrono::milliseconds>(now - point).count();
+	uint64_t age_millis = age_signed_millis > 0 ? static_cast<uint64_t>(age_signed_millis) : 0;
+	return age_millis >= timeout_millis;
 }
 
 template <typename ConnectionT>
@@ -489,11 +489,11 @@ bool ConnectionPool<ConnectionT>::IsExpired(const CachedConnection<ConnectionT> 
 	if (now.time_since_epoch() == std::chrono::steady_clock::duration::zero()) {
 		return false;
 	}
-	uint64_t max_lifetime_val = max_lifetime_seconds.load(std::memory_order_relaxed);
+	uint64_t max_lifetime_val = max_lifetime_millis.load(std::memory_order_relaxed);
 	if (TimePointExpired(cached_conn.GetCreatedAt(), max_lifetime_val, now)) {
 		return true;
 	}
-	uint64_t idle_timeout_val = idle_timeout_seconds.load(std::memory_order_relaxed);
+	uint64_t idle_timeout_val = idle_timeout_millis.load(std::memory_order_relaxed);
 	if (TimePointExpired(cached_conn.GetReturnedAt(), idle_timeout_val, now)) {
 		return true;
 	}
@@ -506,7 +506,7 @@ bool ConnectionPool<ConnectionT>::IsExpired(std::chrono::steady_clock::time_poin
 	if (now.time_since_epoch() == std::chrono::steady_clock::duration::zero()) {
 		return false;
 	}
-	uint64_t max_lifetime_val = max_lifetime_seconds.load(std::memory_order_relaxed);
+	uint64_t max_lifetime_val = max_lifetime_millis.load(std::memory_order_relaxed);
 	return TimePointExpired(created_at, max_lifetime_val, now);
 }
 
@@ -527,15 +527,15 @@ bool ConnectionPool<ConnectionT>::CheckConnectionNotExpiredAndHealthy(std::uniqu
 template <typename ConnectionT>
 uint64_t ConnectionPool<ConnectionT>::CalcReaperSleepSeconds() {
 	uint64_t sleep_seconds = 30;
-	uint64_t max_lifetime_val = max_lifetime_seconds.load(std::memory_order_relaxed);
-	uint64_t idle_timeout_val = idle_timeout_seconds.load(std::memory_order_relaxed);
+	uint64_t max_lifetime_seconds = max_lifetime_millis.load(std::memory_order_relaxed) / 1000;
+	uint64_t idle_timeout_seconds = idle_timeout_millis.load(std::memory_order_relaxed) / 1000;
 
-	if (max_lifetime_val > 0 && idle_timeout_val > 0) {
-		sleep_seconds = (std::min)(max_lifetime_val, idle_timeout_val);
-	} else if (max_lifetime_val > 0) {
-		sleep_seconds = max_lifetime_val;
-	} else if (idle_timeout_val > 0) {
-		sleep_seconds = idle_timeout_val;
+	if (max_lifetime_seconds > 0 && idle_timeout_seconds > 0) {
+		sleep_seconds = (std::min)(max_lifetime_seconds, idle_timeout_seconds);
+	} else if (max_lifetime_seconds > 0) {
+		sleep_seconds = max_lifetime_seconds;
+	} else if (idle_timeout_seconds > 0) {
+		sleep_seconds = idle_timeout_seconds;
 	}
 
 	sleep_seconds = (std::max<uint64_t>)(1, sleep_seconds / 2);
@@ -552,8 +552,8 @@ void ConnectionPool<ConnectionT>::ReaperLoop() {
 		reaper_cv.wait_for(lock, std::chrono::seconds(sleep_seconds),
 		                   [this]() { return reaper_shutdown_flag.load(std::memory_order_acquire); });
 
-		uint64_t max_lifetime_val = max_lifetime_seconds.load(std::memory_order_relaxed);
-		uint64_t idle_timeout_val = idle_timeout_seconds.load(std::memory_order_relaxed);
+		uint64_t max_lifetime_val = max_lifetime_millis.load(std::memory_order_relaxed);
+		uint64_t idle_timeout_val = idle_timeout_millis.load(std::memory_order_relaxed);
 
 		if (max_lifetime_val == 0 && idle_timeout_val == 0) {
 			reaper_shutdown_flag.store(true, std::memory_order_release);

@@ -26,7 +26,7 @@ public:
 		CACHE_DISABLED,
 	};
 
-	ConnectionPool(uint64_t max_connections = DEFAULT_POOL_SIZE, uint64_t wait_timeout_ms = DEFAULT_POOL_TIMEOUT_MS,
+	ConnectionPool(uint64_t max_connections = DEFAULT_POOL_SIZE, uint64_t wait_timeout_millis = DEFAULT_POOL_TIMEOUT_MS,
 	               ThreadLocalCacheState tl_cache_state = ThreadLocalCacheState::CACHE_DISABLED);
 	virtual ~ConnectionPool();
 
@@ -39,8 +39,8 @@ public:
 
 	uint64_t GetMaxConnections() const;
 	void SetMaxConnections(uint64_t new_max);
-	uint64_t GetWaitTimeoutMs() const;
-	void SetWaitTimeoutMs(uint64_t timeout_ms);
+	uint64_t GetWaitTimeoutMillis() const;
+	void SetWaitTimeoutMillis(uint64_t timeout_millis);
 
 	uint64_t GetAvailableConnections() const;
 	uint64_t GetTotalConnections() const;
@@ -50,10 +50,10 @@ public:
 	uint64_t GetThreadLocalCacheHits() const;
 	uint64_t GetThreadLocalCacheMisses() const;
 
-	uint64_t GetMaxLifetimeSeconds() const;
-	void SetMaxLifetimeSeconds(uint64_t new_max_lifetime_seconds);
-	uint64_t GetIdleTimeoutSeconds() const;
-	void SetIdleTimeoutSeconds(uint64_t new_idle_timeout_seconds);
+	uint64_t GetMaxLifetimeMillis() const;
+	void SetMaxLifetimeMillis(uint64_t new_max_lifetime_millis);
+	uint64_t GetIdleTimeoutMillis() const;
+	void SetIdleTimeoutMillis(uint64_t new_idle_timeout_millis);
 
 	bool EnsureReaperRunning();
 	void ShutdownReaper();
@@ -85,7 +85,7 @@ private:
 
 	bool TimeoutEnabled() const;
 	std::chrono::steady_clock::time_point GetNowForTimeoutPurposes();
-	static bool TimePointExpired(std::chrono::steady_clock::time_point point, uint64_t timeout,
+	static bool TimePointExpired(std::chrono::steady_clock::time_point point, uint64_t timeout_millis,
 	                             std::chrono::steady_clock::time_point now);
 	bool IsExpired(const CachedConnection<ConnectionT> &cached_conn, std::chrono::steady_clock::time_point now) const;
 	bool IsExpired(std::chrono::steady_clock::time_point created_at, std::chrono::steady_clock::time_point now) const;
@@ -104,7 +104,7 @@ private:
 	void DecrementTotalConnections();
 
 	std::atomic<uint64_t> max_connections {0};
-	std::atomic<uint64_t> wait_timeout_ms {0};
+	std::atomic<uint64_t> wait_timeout_millis {0};
 
 	mutable std::mutex pool_lock;
 	std::condition_variable pool_cv;
@@ -114,8 +114,8 @@ private:
 	std::atomic<uint64_t> total_connections {0};
 	std::atomic<bool> shutdown_flag {false};
 
-	std::atomic<uint64_t> max_lifetime_seconds {0};
-	std::atomic<uint64_t> idle_timeout_seconds {0};
+	std::atomic<uint64_t> max_lifetime_millis {0};
+	std::atomic<uint64_t> idle_timeout_millis {0};
 
 	std::thread reaper_thread;
 	std::condition_variable reaper_cv;
