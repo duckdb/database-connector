@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "dbconnector/pool/cached_connection.hpp"
+#include "dbconnector/pool/connection_pool_config.hpp"
 #include "dbconnector/pool/pooled_connection.hpp"
 #include "dbconnector/pool/thread_local_connection_cache.hpp"
 
@@ -18,16 +19,7 @@ namespace pool {
 template <typename ConnectionT>
 class ConnectionPool : public std::enable_shared_from_this<ConnectionPool<ConnectionT>> {
 public:
-	static constexpr uint64_t DEFAULT_POOL_SIZE = 4;
-	static constexpr uint64_t DEFAULT_POOL_TIMEOUT_MS = 30000;
-
-	enum class ThreadLocalCacheState {
-		CACHE_ENABLED,
-		CACHE_DISABLED,
-	};
-
-	ConnectionPool(uint64_t max_connections = DEFAULT_POOL_SIZE, uint64_t wait_timeout_millis = DEFAULT_POOL_TIMEOUT_MS,
-	               ThreadLocalCacheState tl_cache_state = ThreadLocalCacheState::CACHE_DISABLED);
+	ConnectionPool(ConnectionPoolConfig config = ConnectionPoolConfig());
 	virtual ~ConnectionPool();
 
 	PooledConnection<ConnectionT> WaitAcquire();

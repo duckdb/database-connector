@@ -27,13 +27,9 @@ public:
 
 class TestConnectionPool : public dbconnector::pool::ConnectionPool<TestConnection> {
 public:
-	TestConnectionPool(size_t max_connections = DEFAULT_POOL_SIZE, size_t timeout_ms = DEFAULT_POOL_TIMEOUT_MS,
-	                   bool tl_cache_enabled = true)
+	TestConnectionPool(size_t max_connections = 4, size_t timeout_ms = 30000, bool tl_cache_enabled = true)
 	    : dbconnector::pool::ConnectionPool<TestConnection>(
-	          max_connections, timeout_ms,
-	          tl_cache_enabled
-	              ? dbconnector::pool::ConnectionPool<TestConnection>::ThreadLocalCacheState::CACHE_ENABLED
-	              : dbconnector::pool::ConnectionPool<TestConnection>::ThreadLocalCacheState::CACHE_DISABLED) {
+	          CreateConfig(max_connections, timeout_ms, tl_cache_enabled)) {
 	}
 
 protected:
@@ -47,6 +43,16 @@ protected:
 
 	void ResetConnection(TestConnection &) override {
 		// no-op
+	}
+
+private:
+	static dbconnector::pool::ConnectionPoolConfig CreateConfig(size_t max_connections, size_t timeout_ms,
+	                                                            bool tl_cache_enabled = true) {
+		dbconnector::pool::ConnectionPoolConfig config;
+		config.max_connections = max_connections;
+		config.wait_timeout_millis = timeout_ms;
+		config.tl_cache_enabled = tl_cache_enabled;
+		return config;
 	}
 };
 
