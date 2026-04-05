@@ -591,6 +591,11 @@ void ConnectionPool<ConnectionT>::ReaperLoop() {
 }
 
 template <typename ConnectionT>
+bool ConnectionPool<ConnectionT>::IsReaperRunning() {
+	return !reaper_shutdown_flag.load(std::memory_order_relaxed);
+}
+
+template <typename ConnectionT>
 bool ConnectionPool<ConnectionT>::EnsureReaperRunning() {
 	if (!TimeoutEnabled()) {
 		return false;
