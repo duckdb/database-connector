@@ -232,10 +232,12 @@ TEST_CASE("Test pool disable running", group_name) {
 
 TEST_CASE("Test pool with a reaper", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
+	REQUIRE(!pool->IsReaperRunning());
 	REQUIRE(!pool->EnsureReaperRunning());
 	pool->SetMaxLifetimeMillis(1000);
 	REQUIRE(pool->EnsureReaperRunning());
 	REQUIRE(pool->EnsureReaperRunning());
+	REQUIRE(pool->IsReaperRunning());
 
 	{
 		auto conn = pool->WaitAcquire();
@@ -269,10 +271,13 @@ TEST_CASE("Test pool with a reaper", group_name) {
 
 TEST_CASE("Test pool with a reaper restart", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(4, 1000, false);
+	REQUIRE(!pool->IsReaperRunning());
 	REQUIRE(!pool->EnsureReaperRunning());
 	pool->SetMaxLifetimeMillis(1000);
 	REQUIRE(pool->EnsureReaperRunning());
+	REQUIRE(pool->IsReaperRunning());
 	pool->ShutdownReaper();
+	REQUIRE(!pool->IsReaperRunning());
 
 	{
 		auto conn = pool->WaitAcquire();

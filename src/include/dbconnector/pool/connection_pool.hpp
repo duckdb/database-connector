@@ -47,6 +47,7 @@ public:
 	uint64_t GetIdleTimeoutMillis() const;
 	void SetIdleTimeoutMillis(uint64_t new_idle_timeout_millis);
 
+	bool IsReaperRunning();
 	bool EnsureReaperRunning();
 	void ShutdownReaper();
 
@@ -111,7 +112,7 @@ private:
 
 	std::thread reaper_thread;
 	std::condition_variable reaper_cv;
-	std::atomic<bool> reaper_shutdown_flag {false};
+	std::atomic<bool> reaper_shutdown_flag {true};
 
 	std::atomic<bool> tl_cache_enabled {false};
 	std::atomic<uint64_t> tl_cache_hits {0};
