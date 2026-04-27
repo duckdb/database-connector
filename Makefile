@@ -31,7 +31,7 @@ build_threads:
 		cmake --build . --config Debug
 
 test: build 
-	build/debug/test_database_connection
+	build/debug/test_database_connector
 
 test_threads: build_threads
-	build/debug/test_database_connection
+	build/debug/test_database_connector

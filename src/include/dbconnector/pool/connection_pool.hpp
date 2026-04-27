@@ -8,6 +8,7 @@
 #include <mutex>
 #include <thread>
 
+#include "dbconnector/pool/acquire_mode.hpp"
 #include "dbconnector/pool/cached_connection.hpp"
 #include "dbconnector/pool/connection_pool_config.hpp"
 #include "dbconnector/pool/pooled_connection.hpp"
@@ -22,12 +23,17 @@ public:
 	ConnectionPool(ConnectionPoolConfig config = ConnectionPoolConfig());
 	virtual ~ConnectionPool();
 
+	PooledConnection<ConnectionT> Acquire();
 	PooledConnection<ConnectionT> WaitAcquire();
 	PooledConnection<ConnectionT> TryAcquire();
 	PooledConnection<ConnectionT> ForceAcquire();
 
 	bool IsShutdown() const;
 	void Shutdown();
+
+	AcquireMode GetAcquireMode() const;
+	void SetAcquireMode(AcquireMode mode);
+	void SetAcquireMode(const std::string &mode_str);
 
 	uint64_t GetMaxConnections() const;
 	void SetMaxConnections(uint64_t new_max);
@@ -36,6 +42,10 @@ public:
 
 	uint64_t GetAvailableConnections() const;
 	uint64_t GetTotalConnections() const;
+
+	uint64_t GetCacheHits() const;
+	uint64_t GetCacheMisses() const;
+	uint64_t GetTryFailures() const;
 
 	bool IsThreadLocalCacheEnabled() const;
 	void SetThreadLocalCacheEnabled(bool enabled);
@@ -47,9 +57,10 @@ public:
 	uint64_t GetIdleTimeoutMillis() const;
 	void SetIdleTimeoutMillis(uint64_t new_idle_timeout_millis);
 
-	bool IsReaperRunning();
+	bool IsReaperRunning() const;
 	bool EnsureReaperRunning();
 	void ShutdownReaper();
+	uint64_t GetReaperPeriodMillis() const;
 
 protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
@@ -85,7 +96,7 @@ private:
 	bool CheckConnectionNotExpiredAndHealthy(std::unique_lock<std::mutex> &lock,
 	                                         CachedConnection<ConnectionT> &cached_conn,
 	                                         std::chrono::steady_clock::time_point now);
-	uint64_t CalcReaperSleepSeconds();
+	uint64_t CalcReaperSleepSeconds() const;
 	void ReaperLoop();
 	void ShutdownReaperInternal(std::unique_lock<std::mutex> &lock);
 
@@ -93,19 +104,25 @@ private:
 	bool TryReturnToThreadLocal(std::unique_ptr<ConnectionT> &conn, std::chrono::steady_clock::time_point created_at,
 	                            std::chrono::steady_clock::time_point returned_at);
 	void ReturnFromThreadLocalCache(CachedConnection<ConnectionT> cached_conn);
-
 	void DecrementTotalConnections();
-
-	std::atomic<uint64_t> max_connections {0};
-	std::atomic<uint64_t> wait_timeout_millis {0};
+	bool IsPoolDisabled();
 
 	mutable std::mutex pool_lock;
 	std::condition_variable pool_cv;
+
+	std::atomic<AcquireMode> acquire_mode {AcquireMode::FORCE};
+
+	std::atomic<uint64_t> max_connections {0};
+	std::atomic<uint64_t> wait_timeout_millis {0};
 
 	std::deque<CachedConnection<ConnectionT>> available;
 	std::atomic<uint64_t> available_connections {0};
 	std::atomic<uint64_t> total_connections {0};
 	std::atomic<bool> shutdown_flag {false};
+
+	std::atomic<uint64_t> cache_hits {0};
+	std::atomic<uint64_t> cache_misses {0};
+	std::atomic<uint64_t> try_failures {0};
 
 	std::atomic<uint64_t> max_lifetime_millis {0};
 	std::atomic<uint64_t> idle_timeout_millis {0};
