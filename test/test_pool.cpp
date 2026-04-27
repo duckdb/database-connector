@@ -52,12 +52,15 @@ private:
 		config.max_connections = max_connections;
 		config.wait_timeout_millis = timeout_ms;
 		config.tl_cache_enabled = tl_cache_enabled;
+		config.idle_timeout_millis = 0;
+		config.start_reaper_thread = false;
 		return config;
 	}
 };
 
 TEST_CASE("Test connection pool basic", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>();
+	REQUIRE(pool->GetAcquireMode() == dbconnector::pool::AcquireMode::FORCE);
 	REQUIRE(pool->WaitAcquire());
 	REQUIRE(pool->TryAcquire());
 	REQUIRE(pool->ForceAcquire());
@@ -74,6 +77,34 @@ TEST_CASE("Test connection pool basic", group_name) {
 	REQUIRE(pool->GetMaxLifetimeMillis() == 44);
 	pool->SetIdleTimeoutMillis(45);
 	REQUIRE(pool->GetIdleTimeoutMillis() == 45);
+
+	REQUIRE(pool->GetCacheHits() == 2);
+	REQUIRE(pool->GetCacheMisses() == 1);
+	REQUIRE(pool->GetTryFailures() == 0);
+}
+
+TEST_CASE("Test connection pool acquire mode", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(1);
+	REQUIRE(pool->GetAcquireMode() == dbconnector::pool::AcquireMode::FORCE);
+	REQUIRE(pool->GetMaxConnections() == 1);
+	auto conn1 = pool->Acquire();
+	REQUIRE(conn1);
+	REQUIRE(pool->GetMaxConnections() == 1);
+	{
+		REQUIRE(pool->GetAvailableConnections() == 0);
+		auto conn2 = pool->Acquire();
+		REQUIRE(conn2);
+		REQUIRE(pool->GetMaxConnections() == 1);
+		REQUIRE(pool->GetAvailableConnections() == 0);
+	}
+	pool->SetAcquireMode("try");
+	REQUIRE(!pool->Acquire());
+	REQUIRE(pool->GetMaxConnections() == 1);
+	REQUIRE(pool->GetAvailableConnections() == 0);
+
+	REQUIRE(pool->GetCacheHits() == 0);
+	REQUIRE(pool->GetCacheMisses() == 2);
+	REQUIRE(pool->GetTryFailures() == 1);
 }
 
 TEST_CASE("Test pool size no thread-local", group_name) {
@@ -108,6 +139,10 @@ TEST_CASE("Test pool size no thread-local", group_name) {
 		timeout_thrown = true;
 	}
 	REQUIRE(timeout_thrown);
+
+	REQUIRE(pool->GetCacheHits() == 1);
+	REQUIRE(pool->GetCacheMisses() == 2);
+	REQUIRE(pool->GetTryFailures() == 0);
 }
 
 TEST_CASE("Test pool size with thread-local", group_name) {
@@ -144,6 +179,10 @@ TEST_CASE("Test pool size with thread-local", group_name) {
 		REQUIRE(3 == pool->GetTotalConnections());
 	}
 	REQUIRE(2 == pool->GetTotalConnections());
+
+	REQUIRE(pool->GetCacheHits() == 1);
+	REQUIRE(pool->GetCacheMisses() == 3);
+	REQUIRE(pool->GetTryFailures() == 0);
 }
 
 TEST_CASE("Test pool disabled", group_name) {
@@ -168,6 +207,10 @@ TEST_CASE("Test pool disabled", group_name) {
 		REQUIRE(pool->GetTotalConnections() == 0);
 	}
 	REQUIRE(pool->GetTotalConnections() == 0);
+
+	REQUIRE(pool->GetCacheHits() == 0);
+	REQUIRE(pool->GetCacheMisses() == 2);
+	REQUIRE(pool->GetTryFailures() == 0);
 }
 
 TEST_CASE("Test pool disable running", group_name) {
@@ -228,6 +271,10 @@ TEST_CASE("Test pool disable running", group_name) {
 		REQUIRE(pool->GetTotalConnections() == 0);
 	}
 	REQUIRE(pool->GetTotalConnections() == 0);
+
+	REQUIRE(pool->GetCacheHits() == 1);
+	REQUIRE(pool->GetCacheMisses() == 5);
+	REQUIRE(pool->GetTryFailures() == 0);
 }
 
 TEST_CASE("Test pool with a reaper", group_name) {
@@ -238,6 +285,7 @@ TEST_CASE("Test pool with a reaper", group_name) {
 	REQUIRE(pool->EnsureReaperRunning());
 	REQUIRE(pool->EnsureReaperRunning());
 	REQUIRE(pool->IsReaperRunning());
+	REQUIRE(pool->GetReaperPeriodMillis() == 1000);
 
 	{
 		auto conn = pool->WaitAcquire();
@@ -267,6 +315,10 @@ TEST_CASE("Test pool with a reaper", group_name) {
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 	REQUIRE(0 == pool->GetTotalConnections());
+
+	REQUIRE(pool->GetCacheHits() == 0);
+	REQUIRE(pool->GetCacheMisses() == 2);
+	REQUIRE(pool->GetTryFailures() == 0);
 }
 
 TEST_CASE("Test pool with a reaper restart", group_name) {
@@ -299,4 +351,8 @@ TEST_CASE("Test pool with a reaper restart", group_name) {
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 	REQUIRE(0 == pool->GetTotalConnections());
+
+	REQUIRE(pool->GetCacheHits() == 0);
+	REQUIRE(pool->GetCacheMisses() == 1);
+	REQUIRE(pool->GetTryFailures() == 0);
 }

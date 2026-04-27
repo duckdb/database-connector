@@ -50,7 +50,7 @@ jobs:
           cd build
           cmake ../test
           cmake --build . --config Debug
-          test_database_connection.exe
+          test_database_connector.exe
 
   macos-tests-aarch64:
     name: macOS Tests (aarch64)
