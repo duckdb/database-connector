@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <algorithm>
+#include <thread>
 
 #include "dbconnector/pool/acquire_mode.hpp"
 

@@ -27,7 +27,7 @@ struct AcquireModeHelpers {
 		}
 	}
 
-	std::string ToString(AcquireMode mode) {
+	static std::string ToString(AcquireMode mode) {
 		switch (mode) {
 		case AcquireMode::FORCE:
 			return "force";
