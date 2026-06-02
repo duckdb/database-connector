@@ -46,10 +46,10 @@ TracedBindingColumn OptimizerUtil::TraceBindingToColumn(ColumnBinding binding, L
 			return res;
 		}
 		auto &inner_ref = proj_expr.Cast<BoundColumnRefExpression>();
-		if (inner_ref.depth > 0) {
+		if (inner_ref.Depth() > 0) {
 			return res;
 		}
-		binding = inner_ref.binding;
+		binding = inner_ref.BindingMutable();
 		current = *current.get().children[0];
 	}
 

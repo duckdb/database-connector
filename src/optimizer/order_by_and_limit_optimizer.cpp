@@ -42,10 +42,10 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 		return std::string();
 	}
 	auto &col_ref = expr.Cast<BoundColumnRefExpression>();
-	if (col_ref.depth > 0) {
+	if (col_ref.Depth() > 0) {
 		return std::string();
 	}
-	auto binding = col_ref.binding;
+	auto binding = col_ref.BindingMutable();
 
 	reference<LogicalOperator> current = child;
 	while (current.get().type == LogicalOperatorType::LOGICAL_PROJECTION) {
@@ -61,10 +61,10 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 			return std::string();
 		}
 		auto &inner_ref = proj_expr.Cast<BoundColumnRefExpression>();
-		if (inner_ref.depth > 0) {
+		if (inner_ref.Depth() > 0) {
 			return std::string();
 		}
-		binding = inner_ref.binding;
+		binding = inner_ref.BindingMutable();
 		current = *current.get().children[0];
 	}
 
@@ -127,8 +127,8 @@ static string TryBuildOrderByClause(const OrderByAndLimitOptimizer::Config &conf
 static void CollectBindingRefs(Expression &expr, idx_t target_table_index, unordered_set<idx_t> &referenced) {
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
 		auto &ref = expr.Cast<BoundColumnRefExpression>();
-		if (ref.binding.table_index.index == target_table_index) {
-			referenced.insert(ref.binding.column_index);
+		if (ref.BindingMutable().table_index.index == target_table_index) {
+			referenced.insert(ref.BindingMutable().column_index);
 		}
 	}
 	ExpressionIterator::EnumerateChildren(
@@ -138,10 +138,10 @@ static void CollectBindingRefs(Expression &expr, idx_t target_table_index, unord
 static void RewriteBindingRefs(Expression &expr, idx_t target_table_index, unordered_map<idx_t, idx_t> &old_to_new) {
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
 		auto &ref = expr.Cast<BoundColumnRefExpression>();
-		if (ref.binding.table_index.index == target_table_index) {
-			auto it = old_to_new.find(ref.binding.column_index);
+		if (ref.BindingMutable().table_index.index == target_table_index) {
+			auto it = old_to_new.find(ref.BindingMutable().column_index);
 			if (it != old_to_new.end()) {
-				ref.binding.column_index = ProjectionIndex(it->second);
+				ref.BindingMutable().column_index = ProjectionIndex(it->second);
 			}
 		}
 	}

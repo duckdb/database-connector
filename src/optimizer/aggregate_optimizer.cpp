@@ -1,5 +1,7 @@
 #include "dbconnector/optimizer/aggregate_optimizer.hpp"
 
+#include "fmt/format.h"
+
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
@@ -64,20 +66,20 @@ static bool CanPushAggregate(LogicalAggregate &aggr) {
 		if (agg_expr.IsDistinct()) {
 			return false;
 		}
-		if (agg_expr.filter) {
+		if (agg_expr.GetFilterMutable()) {
 			return false;
 		}
-		if (agg_expr.order_bys && !agg_expr.order_bys->orders.empty()) {
+		if (agg_expr.GetOrderBysMutable() && !agg_expr.GetOrderBysMutable()->orders.empty()) {
 			return false;
 		}
-		if (PUSHABLE_AGGREGATES.find(agg_expr.function.GetName()) == PUSHABLE_AGGREGATES.end()) {
+		if (PUSHABLE_AGGREGATES.find(agg_expr.FunctionMutable().GetName()) == PUSHABLE_AGGREGATES.end()) {
 			return false;
 		}
-		if (agg_expr.function.GetName() != "count_star") {
-			if (agg_expr.children.size() != 1) {
+		if (agg_expr.FunctionMutable().GetName() != "count_star") {
+			if (agg_expr.GetChildrenMutable().size() != 1) {
 				return false;
 			}
-			if (agg_expr.children[0]->GetExpressionClass() != ExpressionClass::BOUND_COLUMN_REF) {
+			if (agg_expr.GetChildrenMutable()[0]->GetExpressionClass() != ExpressionClass::BOUND_COLUMN_REF) {
 				return false;
 			}
 		}
@@ -110,7 +112,8 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 
 	for (auto &group : aggr.groups) {
 		auto &col_ref = group->Cast<BoundColumnRefExpression>();
-		TracedBindingColumn traced_binding = OptimizerUtil::TraceBindingToColumn(col_ref.binding, aggr_child, get);
+		TracedBindingColumn traced_binding =
+		    OptimizerUtil::TraceBindingToColumn(col_ref.BindingMutable(), aggr_child, get);
 		if (!traced_binding.Found()) {
 			return res;
 		}
@@ -128,28 +131,28 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 		string fragment;
 		string alias = "_agg_" + to_string(agg_idx);
 
-		if (agg_expr.function.GetName() == "count_star") {
+		if (agg_expr.FunctionMutable().GetName() == "count_star") {
 			fragment =
 			    "COUNT(*) AS " + dbconnector::query::QueryWriter::WriteIdentifier(alias, config.identifier_quote);
 		} else {
-			auto &child_ref = agg_expr.children[0]->Cast<BoundColumnRefExpression>();
+			auto &child_ref = agg_expr.GetChildrenMutable()[0]->Cast<BoundColumnRefExpression>();
 			TracedBindingColumn traced_binding =
-			    OptimizerUtil::TraceBindingToColumn(child_ref.binding, aggr_child, get);
+			    OptimizerUtil::TraceBindingToColumn(child_ref.BindingMutable(), aggr_child, get);
 			if (!traced_binding.Found()) {
 				return res;
 			}
 			string quoted_col =
 			    dbconnector::query::QueryWriter::WriteIdentifier(traced_binding.col_name, config.identifier_quote);
 			string func_upper;
-			if (agg_expr.function.GetName() == "count") {
+			if (agg_expr.FunctionMutable().GetName() == "count") {
 				func_upper = "COUNT";
-			} else if (agg_expr.function.GetName() == "sum") {
+			} else if (agg_expr.FunctionMutable().GetName() == "sum") {
 				func_upper = "SUM";
-			} else if (agg_expr.function.GetName() == "avg") {
+			} else if (agg_expr.FunctionMutable().GetName() == "avg") {
 				func_upper = "AVG";
-			} else if (agg_expr.function.GetName() == "min") {
+			} else if (agg_expr.FunctionMutable().GetName() == "min") {
 				func_upper = "MIN";
-			} else if (agg_expr.function.GetName() == "max") {
+			} else if (agg_expr.FunctionMutable().GetName() == "max") {
 				func_upper = "MAX";
 			} else {
 				return res;
@@ -230,14 +233,15 @@ struct AggregateRewriteInfo {
 static void RewriteExpression(unique_ptr<Expression> &expr, AggregateRewriteInfo &info) {
 	if (expr->GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
 		auto &col_ref = expr->Cast<BoundColumnRefExpression>();
-		if (col_ref.depth > 0) {
+		if (col_ref.Depth() > 0) {
 			return;
 		}
-		if (col_ref.binding.table_index == info.group_index) {
-			col_ref.binding.table_index = info.scan_table_index;
-		} else if (col_ref.binding.table_index == info.aggregate_index) {
-			col_ref.binding.table_index = info.scan_table_index;
-			col_ref.binding.column_index = ProjectionIndex(col_ref.binding.column_index.GetIndex() + info.num_groups);
+		if (col_ref.BindingMutable().table_index == info.group_index) {
+			col_ref.BindingMutable().table_index = info.scan_table_index;
+		} else if (col_ref.BindingMutable().table_index == info.aggregate_index) {
+			col_ref.BindingMutable().table_index = info.scan_table_index;
+			col_ref.BindingMutable().column_index =
+			    ProjectionIndex(col_ref.BindingMutable().column_index.GetIndex() + info.num_groups);
 		}
 	}
 	ExpressionIterator::EnumerateChildren(*expr,

@@ -72,9 +72,9 @@ std::string FilterPushdown::TransformExpression(const std::string &column_name, 
 		auto &right = BoundComparisonExpression::Right(comparison);
 		const Value *constant = nullptr;
 		if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
-			constant = &right.Cast<BoundConstantExpression>().value;
+			constant = &right.Cast<BoundConstantExpression>().GetValue();
 		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
-			constant = &left.Cast<BoundConstantExpression>().value;
+			constant = &left.Cast<BoundConstantExpression>().GetValue();
 			comparison_type = FlipComparisonExpression(comparison_type);
 		} else {
 			return std::string();
@@ -89,9 +89,9 @@ std::string FilterPushdown::TransformExpression(const std::string &column_name, 
 		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
 		switch (conjunction.GetExpressionType()) {
 		case ExpressionType::CONJUNCTION_AND:
-			return CreateExpression(column_name, conjunction.children, "AND");
+			return CreateExpression(column_name, conjunction.GetChildren(), "AND");
 		case ExpressionType::CONJUNCTION_OR:
-			return CreateExpression(column_name, conjunction.children, "OR");
+			return CreateExpression(column_name, conjunction.GetChildren(), "OR");
 		default:
 			return std::string();
 		}
@@ -100,28 +100,29 @@ std::string FilterPushdown::TransformExpression(const std::string &column_name, 
 		auto &op = expr.Cast<BoundOperatorExpression>();
 		switch (op.GetExpressionType()) {
 		case ExpressionType::OPERATOR_IS_NULL:
-			if (op.children.size() == 1 && IsDirectReference(*op.children[0])) {
+			if (op.GetChildren().size() == 1 && IsDirectReference(*op.GetChildren()[0])) {
 				return column_name + " IS NULL";
 			}
 			return std::string();
 		case ExpressionType::OPERATOR_IS_NOT_NULL:
-			if (op.children.size() == 1 && IsDirectReference(*op.children[0])) {
+			if (op.GetChildren().size() == 1 && IsDirectReference(*op.GetChildren()[0])) {
 				return column_name + " IS NOT NULL";
 			}
 			return std::string();
 		case ExpressionType::COMPARE_IN: {
-			if (op.children.empty() || !IsDirectReference(*op.children[0])) {
+			if (op.GetChildren().empty() || !IsDirectReference(*op.GetChildren()[0])) {
 				return std::string();
 			}
 			std::string in_list;
-			for (idx_t i = 1; i < op.children.size(); i++) {
-				if (op.children[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+			for (idx_t i = 1; i < op.GetChildren().size(); i++) {
+				if (op.GetChildren()[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
 					return std::string();
 				}
 				if (!in_list.empty()) {
 					in_list += ", ";
 				}
-				in_list += query::QueryWriter::WriteConstant(op.children[i]->Cast<BoundConstantExpression>().value);
+				in_list +=
+				    query::QueryWriter::WriteConstant(op.GetChildren()[i]->Cast<BoundConstantExpression>().GetValue());
 			}
 			return column_name + " IN (" + in_list + ")";
 		}
@@ -131,15 +132,15 @@ std::string FilterPushdown::TransformExpression(const std::string &column_name, 
 	}
 	case ExpressionClass::BOUND_FUNCTION: {
 		auto &func = expr.Cast<BoundFunctionExpression>();
-		if (func.function.GetName() == OptionalFilterScalarFun::NAME && func.bind_info) {
-			auto &data = func.bind_info->Cast<OptionalFilterFunctionData>();
+		if (func.Function().GetName() == OptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<OptionalFilterFunctionData>();
 			return data.child_filter_expr ? TransformExpression(column_name, *data.child_filter_expr) : std::string();
 		}
-		if (func.function.GetName() == SelectivityOptionalFilterScalarFun::NAME && func.bind_info) {
-			auto &data = func.bind_info->Cast<SelectivityOptionalFilterFunctionData>();
+		if (func.Function().GetName() == SelectivityOptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<SelectivityOptionalFilterFunctionData>();
 			return data.child_filter_expr ? TransformExpression(column_name, *data.child_filter_expr) : std::string();
 		}
-		if (func.function.GetName() == DynamicFilterScalarFun::NAME) {
+		if (func.Function().GetName() == DynamicFilterScalarFun::NAME) {
 			return std::string();
 		}
 		return std::string();
