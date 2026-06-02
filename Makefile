@@ -30,8 +30,17 @@ build_threads:
 		cmake -DCMAKE_BUILD_TYPE=Debug $(GENERATOR) -DENABLE_THREAD_SANITIZER=ON ../../test && \
 		cmake --build . --config Debug
 
+build_ext:
+	mkdir -p build/debug
+	cd build/debug && \
+		cmake -DCMAKE_BUILD_TYPE=Debug $(GENERATOR) ../../test/extension && \
+		cmake --build . --config Debug
+
 test: build 
 	build/debug/test_database_connector
 
 test_threads: build_threads
 	build/debug/test_database_connector
+
+test_ext: build_ext
+	build/debug/test_database_connector_ext
