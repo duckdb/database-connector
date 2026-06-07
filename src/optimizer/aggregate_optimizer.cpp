@@ -26,8 +26,8 @@ namespace optimizer {
 using namespace duckdb;
 
 AggregateOptimizer::Config AggregateOptimizer::CreateConfig(ClientContext &ctx, const std::string &enabled_option,
-
-                                                            char identifier_quote, std::string table_scan_name,
+                                                            char identifier_quote, query::QuoteEscapeStyle escape_style,
+                                                            std::string table_scan_name,
                                                             should_push_aggregate_t should_push_aggregate) {
 	Config res;
 
@@ -38,6 +38,7 @@ AggregateOptimizer::Config AggregateOptimizer::CreateConfig(ClientContext &ctx, 
 	}
 
 	res.identifier_quote = identifier_quote;
+	res.escape_style = escape_style;
 	res.table_scan_name = std::move(table_scan_name);
 	res.should_push_aggregate = should_push_aggregate;
 
@@ -105,6 +106,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 		return res;
 	}
 
+	auto query_config = query::QueryWriter::CreateConfig(config.identifier_quote, config.escape_style);
 	vector<string> select_fragments;
 	vector<string> group_names;
 	vector<LogicalType> new_types;
@@ -117,8 +119,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 		if (!traced_binding.Found()) {
 			return res;
 		}
-		string quoted =
-		    dbconnector::query::QueryWriter::WriteIdentifier(traced_binding.col_name, config.identifier_quote);
+		string quoted = query::QueryWriter::WriteQuotedAndEscaped(query_config, traced_binding.col_name);
 		select_fragments.push_back(quoted);
 		group_names.push_back(quoted);
 		new_types.push_back(traced_binding.col_type);
@@ -132,8 +133,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 		string alias = "_agg_" + to_string(agg_idx);
 
 		if (agg_expr.FunctionMutable().GetName() == "count_star") {
-			fragment =
-			    "COUNT(*) AS " + dbconnector::query::QueryWriter::WriteIdentifier(alias, config.identifier_quote);
+			fragment = "COUNT(*) AS " + query::QueryWriter::WriteQuotedAndEscaped(query_config, alias);
 		} else {
 			auto &child_ref = agg_expr.GetChildrenMutable()[0]->Cast<BoundColumnRefExpression>();
 			TracedBindingColumn traced_binding =
@@ -141,8 +141,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 			if (!traced_binding.Found()) {
 				return res;
 			}
-			string quoted_col =
-			    dbconnector::query::QueryWriter::WriteIdentifier(traced_binding.col_name, config.identifier_quote);
+			string quoted_col = query::QueryWriter::WriteQuotedAndEscaped(query_config, traced_binding.col_name);
 			string func_upper;
 			if (agg_expr.FunctionMutable().GetName() == "count") {
 				func_upper = "COUNT";
@@ -167,8 +166,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 			if (func_upper == "AVG") {
 				agg_sql = "CAST(" + agg_sql + " AS DOUBLE)";
 			}
-			fragment =
-			    agg_sql + " AS " + dbconnector::query::QueryWriter::WriteIdentifier(alias, config.identifier_quote);
+			fragment = agg_sql + " AS " + query::QueryWriter::WriteQuotedAndEscaped(query_config, alias);
 		}
 
 		select_fragments.push_back(fragment);
@@ -193,9 +191,8 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 				return res;
 			}
 			auto column_name = get.names[table_col_idx];
-			auto config = dbconnector::table_scan::FilterPushdown::CreateConfig('`');
-			auto new_filter =
-			    dbconnector::table_scan::FilterPushdown::TransformFilter(config, column_name, entry.Filter());
+			auto scan_config = table_scan::FilterPushdown::CreateConfig('`', config.escape_style);
+			auto new_filter = table_scan::FilterPushdown::TransformFilter(scan_config, column_name, entry.Filter());
 			if (new_filter.empty()) {
 				return res;
 			}

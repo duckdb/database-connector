@@ -5,33 +5,40 @@
 namespace dbconnector {
 namespace query {
 
-std::string QueryWriter::EscapeQuotes(const std::string &text, char quote) {
+QueryWriter::Config QueryWriter::CreateConfig(char quote, QuoteEscapeStyle escape_style) {
+	Config res;
+	res.quote = quote;
+	res.escape_style = escape_style;
+	return res;
+}
+
+std::string QueryWriter::WriteQuotedAndEscaped(const QueryWriter::Config &config, const std::string &text) {
 	std::string result;
+	result.reserve(text.length() + 2);
+	result.push_back(config.quote);
 	for (auto c : text) {
-		if (c == quote) {
-			result += "\\";
-			result += quote;
-		} else if (c == '\\') {
-			result += "\\\\";
+		if (c == config.quote) {
+			switch (config.escape_style) {
+			case QuoteEscapeStyle::BACKSLASH:
+				result.push_back('\\');
+				break;
+			case QuoteEscapeStyle::DOUBLE_QUOTE:
+				result.push_back(config.quote);
+				break;
+			default:
+				throw QueryWriterException("Invalid unsupported escape style specified: " +
+				                           std::to_string(static_cast<int>(config.escape_style)));
+			}
+			result.push_back(config.quote);
+		} else if (c == '\\' && config.escape_style == QuoteEscapeStyle::BACKSLASH) {
+			result.push_back('\\');
+			result.push_back('\\');
 		} else {
-			result += c;
+			result.push_back(c);
 		}
 	}
+	result.push_back(config.quote);
 	return result;
-}
-
-std::string QueryWriter::WriteQuoted(const std::string &text, char quote) {
-	// 1. Escapes all occurences of 'quote' by escaping them with a backslash
-	// 2. Adds quotes around the string
-	return std::string(1, quote) + EscapeQuotes(text, quote) + std::string(1, quote);
-}
-
-std::string QueryWriter::WriteIdentifier(const std::string &identifier, char identifier_quote) {
-	return WriteQuoted(identifier, identifier_quote);
-}
-
-std::string QueryWriter::WriteLiteral(const std::string &identifier) {
-	return QueryWriter::WriteQuoted(identifier, '\'');
 }
 
 std::string QueryWriter::EncodeBlob(const std::string &val) {

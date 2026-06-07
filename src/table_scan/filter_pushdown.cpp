@@ -19,6 +19,13 @@ namespace table_scan {
 
 using namespace duckdb;
 
+FilterPushdown::Config FilterPushdown::CreateConfig(char identifier_quote, query::QuoteEscapeStyle escape_style) {
+	Config res;
+	res.identifier_quote = identifier_quote;
+	res.escape_style = escape_style;
+	return res;
+}
+
 std::string FilterPushdown::CreateExpression(const std::string &column_name,
                                              const vector<unique_ptr<Expression>> &filters, const std::string &op) {
 	vector<std::string> filter_entries;
@@ -150,15 +157,10 @@ std::string FilterPushdown::TransformExpression(const std::string &column_name, 
 	}
 }
 
-FilterPushdown::Config FilterPushdown::CreateConfig(char identifier_quote) {
-	Config res;
-	res.identifier_quote = identifier_quote;
-	return res;
-}
-
 std::string FilterPushdown::TransformFilter(const FilterPushdown::Config &config, const std::string &column_name,
                                             const TableFilter &filter) {
-	std::string column_name_quoted = query::QueryWriter::WriteIdentifier(column_name, config.identifier_quote);
+	auto query_config = query::QueryWriter::CreateConfig(config.identifier_quote, config.escape_style);
+	std::string column_name_quoted = query::QueryWriter::WriteQuotedAndEscaped(query_config, column_name);
 	auto &expr = FilterUtil::GetExpression(filter, "FilterPushdown::TransformFilter");
 	return TransformExpression(column_name_quoted, expr);
 }

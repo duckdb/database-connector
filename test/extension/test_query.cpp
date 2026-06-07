@@ -4,7 +4,19 @@
 
 static const std::string group_name = "[query]";
 
+using namespace dbconnector::query;
+
 TEST_CASE("Test query writer identifier", group_name) {
-	REQUIRE(dbconnector::query::QueryWriter::WriteIdentifier("foobar", '"') == "\"foobar\"");
-	REQUIRE(dbconnector::query::QueryWriter::WriteIdentifier("foo\"bar", '"') == "\"foo\\\"bar\"");
+	{
+		auto config = QueryWriter::CreateConfig('"', QuoteEscapeStyle::BACKSLASH);
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foobar") == "\"foobar\"");
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foo\"bar\"baz") == "\"foo\\\"bar\\\"baz\"");
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foo\\bar\\baz") == "\"foo\\\\bar\\\\baz\"");
+	}
+	{
+		auto config = QueryWriter::CreateConfig('\'', QuoteEscapeStyle::DOUBLE_QUOTE);
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foobar") == "'foobar'");
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foo'bar'baz") == "'foo''bar''baz'");
+		REQUIRE(QueryWriter::WriteQuotedAndEscaped(config, "foo\\bar\\baz") == "'foo\\bar\\baz'");
+	}
 }
