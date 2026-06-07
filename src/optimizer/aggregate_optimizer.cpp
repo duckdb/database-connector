@@ -191,8 +191,9 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 				return res;
 			}
 			auto column_name = get.names[table_col_idx];
-			auto scan_config = table_scan::FilterPushdown::CreateConfig('`', config.escape_style);
-			auto new_filter = table_scan::FilterPushdown::TransformFilter(scan_config, column_name, entry.Filter());
+			auto scan_config = table_scan::FilterPushdown::CreateConfig('`', '\'', config.escape_style);
+			auto new_filter =
+			    table_scan::FilterPushdown::TransformFilter(scan_config, column_name, entry.Filter(), table_col_idx);
 			if (new_filter.empty()) {
 				return res;
 			}
