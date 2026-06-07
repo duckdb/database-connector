@@ -18,10 +18,9 @@ namespace optimizer {
 
 using namespace duckdb;
 
-OrderByAndLimitOptimizer::Config OrderByAndLimitOptimizer::CreateConfig(ClientContext &ctx,
-                                                                        const std::string &enabled_option,
-                                                                        char identifier_quote,
-                                                                        std::string table_scan_name) {
+OrderByAndLimitOptimizer::Config
+OrderByAndLimitOptimizer::CreateConfig(ClientContext &ctx, const std::string &enabled_option, char identifier_quote,
+                                       query::QuoteEscapeStyle escape_style, std::string table_scan_name) {
 	Config res;
 
 	res.enabled = false;
@@ -31,6 +30,7 @@ OrderByAndLimitOptimizer::Config OrderByAndLimitOptimizer::CreateConfig(ClientCo
 	}
 
 	res.identifier_quote = identifier_quote;
+	res.escape_style = escape_style;
 	res.table_scan_name = std::move(table_scan_name);
 
 	return res;
@@ -84,7 +84,8 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 	if (actual_col_idx >= get.names.size()) {
 		return std::string();
 	}
-	return dbconnector::query::QueryWriter::WriteIdentifier(get.names[actual_col_idx], config.identifier_quote);
+	auto query_config = query::QueryWriter::CreateConfig(config.identifier_quote, config.escape_style);
+	return query::QueryWriter::WriteQuotedAndEscaped(query_config, get.names[actual_col_idx]);
 }
 
 static string TryBuildOrderByClause(const OrderByAndLimitOptimizer::Config &config, vector<BoundOrderByNode> &orders,

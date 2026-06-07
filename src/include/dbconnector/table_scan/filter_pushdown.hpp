@@ -5,16 +5,19 @@
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/table_filter.hpp"
 
+#include "dbconnector/query/query_writer.hpp"
+
 namespace dbconnector {
 namespace table_scan {
 
 class FilterPushdown {
 	struct Config {
 		char identifier_quote = '"';
+		query::QuoteEscapeStyle escape_style = query::QuoteEscapeStyle::DOUBLE_QUOTE;
 	};
 
 public:
-	static Config CreateConfig(char identifier_quote);
+	static Config CreateConfig(char identifier_quote, query::QuoteEscapeStyle escape_style);
 
 	static std::string TransformFilter(const Config &config, const std::string &column_name,
 	                                   const duckdb::TableFilter &filter);
