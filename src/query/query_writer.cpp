@@ -5,10 +5,14 @@
 namespace dbconnector {
 namespace query {
 
-QueryWriter::Config QueryWriter::CreateConfig(char quote, QuoteEscapeStyle escape_style) {
+QueryWriter::Config QueryWriter::CreateConfig(char quote, QuoteEscapeStyle escape_style,
+                                              const std::string &blob_literal_prefix,
+                                              const std::string &blob_literal_suffix) {
 	Config res;
 	res.quote = quote;
 	res.escape_style = escape_style;
+	res.blob_literal_prefix = blob_literal_prefix;
+	res.blob_literal_suffix = blob_literal_suffix;
 	return res;
 }
 
@@ -41,25 +45,26 @@ std::string QueryWriter::WriteQuotedAndEscaped(const QueryWriter::Config &config
 	return result;
 }
 
-std::string QueryWriter::EncodeBlob(const std::string &val) {
+std::string QueryWriter::EncodeBlob(const QueryWriter::Config &config, const std::string &val) {
 	char const HEX_DIGITS[] = "0123456789ABCDEF";
 
-	std::string result = "x'";
+	std::string result = config.blob_literal_prefix;
 	for (size_t i = 0; i < val.size(); i++) {
 		uint8_t byte_val = static_cast<uint8_t>(val[i]);
 		result += HEX_DIGITS[(byte_val >> 4) & 0xf];
 		result += HEX_DIGITS[byte_val & 0xf];
 	}
 	result += "'";
+	result += config.blob_literal_suffix;
 	return result;
 }
 
-std::string QueryWriter::WriteConstant(const duckdb::Value &val) {
+std::string QueryWriter::WriteConstant(const QueryWriter::Config &config, const duckdb::Value &val) {
 	if (val.type().IsNumeric() || val.type().id() == duckdb::LogicalTypeId::BOOLEAN) {
 		return val.ToSQLString();
 	}
 	if (val.type().id() == duckdb::LogicalTypeId::BLOB) {
-		return EncodeBlob(duckdb::StringValue::Get(val));
+		return EncodeBlob(config, duckdb::StringValue::Get(val));
 	}
 	if (val.type().id() == duckdb::LogicalTypeId::TIMESTAMP_TZ) {
 		return val.DefaultCastAs(duckdb::LogicalType::TIMESTAMP)
