@@ -118,8 +118,8 @@ string FilterPushdown::TransformExpressionSubject(const query::QueryWriter::Conf
 		if (struct_type.id() != LogicalTypeId::STRUCT || StructType::IsUnnamed(struct_type)) {
 			return string();
 		}
-		auto child_name = query::QueryWriter::WriteQuotedAndEscaped(identifier_config,
-		                                                            StructType::GetChildName(struct_type, child_idx));
+		auto child_name = query::QueryWriter::WriteQuotedAndEscaped(
+		    identifier_config, StructType::GetChildName(struct_type, child_idx).GetIdentifierName());
 		return "(" + parent_name + ")." + child_name;
 	}
 	default:

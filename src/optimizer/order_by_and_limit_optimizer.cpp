@@ -85,7 +85,7 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 		return std::string();
 	}
 	auto query_config = query::QueryWriter::CreateConfig(config.identifier_quote, config.escape_style);
-	return query::QueryWriter::WriteQuotedAndEscaped(query_config, get.names[actual_col_idx]);
+	return query::QueryWriter::WriteQuotedAndEscaped(query_config, get.names[actual_col_idx].GetIdentifierName());
 }
 
 static string TryBuildOrderByClause(const OrderByAndLimitOptimizer::Config &config, vector<BoundOrderByNode> &orders,

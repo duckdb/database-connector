@@ -68,7 +68,7 @@ TracedBindingColumn OptimizerUtil::TraceBindingToColumn(ColumnBinding binding, L
 	if (actual_col_idx >= get.names.size()) {
 		return res;
 	}
-	res.col_name = get.names[actual_col_idx];
+	res.col_name = get.names[actual_col_idx].GetIdentifierName();
 	res.col_type = get.returned_types[actual_col_idx];
 	return res;
 }
