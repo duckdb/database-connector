@@ -73,7 +73,8 @@ static bool CanPushAggregate(LogicalAggregate &aggr) {
 		if (agg_expr.GetOrderBysMutable() && !agg_expr.GetOrderBysMutable()->orders.empty()) {
 			return false;
 		}
-		if (PUSHABLE_AGGREGATES.find(agg_expr.FunctionMutable().GetName()) == PUSHABLE_AGGREGATES.end()) {
+		if (PUSHABLE_AGGREGATES.find(agg_expr.FunctionMutable().GetName().GetIdentifierName()) ==
+		    PUSHABLE_AGGREGATES.end()) {
 			return false;
 		}
 		if (agg_expr.FunctionMutable().GetName() != "count_star") {
@@ -192,8 +193,8 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 			}
 			auto column_name = get.names[table_col_idx];
 			auto scan_config = table_scan::FilterPushdown::CreateConfig('`', '\'', config.escape_style);
-			auto new_filter =
-			    table_scan::FilterPushdown::TransformFilter(scan_config, column_name, entry.Filter(), table_col_idx);
+			auto new_filter = table_scan::FilterPushdown::TransformFilter(scan_config, column_name.GetIdentifierName(),
+			                                                              entry.Filter(), table_col_idx);
 			if (new_filter.empty()) {
 				return res;
 			}
@@ -208,7 +209,10 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 	}
 
 	get.returned_types = new_types;
-	get.names = new_names;
+	get.names.clear();
+	for (auto &new_name : new_names) {
+		get.names.push_back(Identifier(new_name));
+	}
 	vector<ColumnIndex> new_column_ids;
 	for (idx_t i = 0; i < new_types.size(); i++) {
 		new_column_ids.push_back(ColumnIndex(i));
