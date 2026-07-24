@@ -54,6 +54,14 @@ template <typename ConnectionT>
 CachedConnection<ConnectionT>
 ConnectionPool<ConnectionT>::TryAcquireFromThreadLocal(std::chrono::steady_clock::time_point now) {
 	if (!tl_cache_enabled.load(std::memory_order_relaxed)) {
+		//! The cache may have been disabled while this thread still had a connection parked in it. That
+		//! connection keeps counting towards total_connections, so hand it back to the global pool rather
+		//! than leaving it stranded. Threads that never acquire again only give their connection back when
+		//! their ThreadLocalConnectionCache is destroyed.
+		auto &disabled_cache = GetThreadLocalCache();
+		if (disabled_cache.available && disabled_cache.cached_conn && disabled_cache.owner.lock().get() == this) {
+			disabled_cache.Clear();
+		}
 		return CachedConnection<ConnectionT>();
 	}
 

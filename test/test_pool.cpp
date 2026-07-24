@@ -185,6 +185,38 @@ TEST_CASE("Test pool size with thread-local", group_name) {
 	REQUIRE(pool->GetTryFailures() == 0);
 }
 
+TEST_CASE("Test pool thread-local cache disabled while a connection is parked", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(2, 100, true);
+	pool->SetAcquireMode(dbconnector::pool::AcquireMode::WAIT);
+
+	uint64_t conn_id = 0;
+	{
+		auto conn = pool->WaitAcquire();
+		REQUIRE(conn);
+		conn_id = conn.GetConnection().GetId();
+		REQUIRE(conn_id > 0);
+	}
+
+	// the connection is parked in this thread's cache, so the pool itself has nothing available
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->GetAvailableConnections() == 0);
+
+	pool->SetMaxConnections(1);
+	pool->SetThreadLocalCacheEnabled(false);
+
+	// the parked connection still counts towards total_connections. If it stays in the cache it
+	// occupies the only slot the pool has and this acquire times out.
+	{
+		auto conn = pool->WaitAcquire();
+		REQUIRE(conn);
+		REQUIRE(conn.GetConnection().GetId() == conn_id);
+		REQUIRE(pool->GetTotalConnections() == 1);
+	}
+
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->GetAvailableConnections() == 1);
+}
+
 TEST_CASE("Test pool disabled", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(0);
 
