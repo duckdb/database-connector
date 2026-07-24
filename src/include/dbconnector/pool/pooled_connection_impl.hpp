@@ -34,8 +34,9 @@ PooledConnection<ConnectionT>::~PooledConnection() noexcept {
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(PooledConnection &&other) noexcept
-    : pool(std::move(other.pool)), connection(std::move(other.connection)), valid(other.valid),
+    : id(other.id), pool(std::move(other.pool)), connection(std::move(other.connection)), valid(other.valid),
       created_at(other.created_at) {
+	other.id = 0;
 	other.valid = false;
 }
 
@@ -43,11 +44,13 @@ template <typename ConnectionT>
 PooledConnection<ConnectionT> &PooledConnection<ConnectionT>::operator=(PooledConnection &&other) noexcept {
 	if (this != &other) {
 		ReturnToPool();
+		this->id = other.id;
+		other.id = 0;
 		this->pool = std::move(other.pool);
 		this->connection = std::move(other.connection);
 		this->valid = other.valid;
-		this->created_at = other.created_at;
 		other.valid = false;
+		this->created_at = other.created_at;
 	}
 	return *this;
 }
