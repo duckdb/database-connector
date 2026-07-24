@@ -199,7 +199,7 @@ std::string FilterPushdown::TransformExpression(const query::QueryWriter::Config
 					in_list += "FALSE";
 				} else {
 					in_list += query::QueryWriter::WriteConstant(
-					    identifier_config, op.GetChildren()[i]->Cast<BoundConstantExpression>().GetValue());
+					    constant_config, op.GetChildren()[i]->Cast<BoundConstantExpression>().GetValue());
 				}
 			}
 			return IsVirtualColumn(column_id) ? "FALSE" : subject + " IN (" + in_list + ")";
