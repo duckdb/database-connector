@@ -356,3 +356,17 @@ TEST_CASE("Test pool with a reaper restart", group_name) {
 	REQUIRE(pool->GetCacheMisses() == 1);
 	REQUIRE(pool->GetTryFailures() == 0);
 }
+
+TEST_CASE("Test connection pool connection ids", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(3);
+	auto conn1 = pool->WaitAcquire();
+	auto conn2 = pool->TryAcquire();
+	auto conn3 = pool->ForceAcquire();
+	auto conn4 = pool->TryAcquire();
+	REQUIRE(conn1.Id() > 0);
+	REQUIRE(conn2.Id() > 0);
+	REQUIRE(conn3.Id() > 0);
+	REQUIRE(conn4.Id() == 0);
+	REQUIRE(conn1.Id() != conn2.Id());
+	REQUIRE(conn2.Id() != conn3.Id());
+}
