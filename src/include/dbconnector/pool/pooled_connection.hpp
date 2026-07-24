@@ -26,6 +26,7 @@ public:
 	PooledConnection(PooledConnection &&other) noexcept;
 	PooledConnection &operator=(PooledConnection &&other) noexcept;
 
+	uint64_t Id();
 	ConnectionT &GetConnection();
 	ConnectionT *operator->();
 	explicit operator bool() const;
@@ -36,10 +37,13 @@ public:
 private:
 	void ReturnToPool() noexcept;
 
+	uint64_t id = 0;
 	std::shared_ptr<ConnectionPool<ConnectionT>> pool;
 	std::unique_ptr<ConnectionT> connection;
 	bool valid = false;
 	std::chrono::steady_clock::time_point created_at;
+
+	static uint64_t NextId();
 };
 
 } // namespace pool

@@ -17,7 +17,8 @@ template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(std::shared_ptr<ConnectionPool<ConnectionT>> pool_p,
                                                 std::unique_ptr<ConnectionT> connection_p,
                                                 std::chrono::steady_clock::time_point created_at_p)
-    : pool(std::move(pool_p)), connection(std::move(connection_p)), valid(true), created_at(created_at_p) {
+    : id(NextId()), pool(std::move(pool_p)), connection(std::move(connection_p)), valid(true),
+      created_at(created_at_p) {
 }
 
 template <typename ConnectionT>
@@ -49,6 +50,11 @@ PooledConnection<ConnectionT> &PooledConnection<ConnectionT>::operator=(PooledCo
 		other.valid = false;
 	}
 	return *this;
+}
+
+template <typename ConnectionT>
+uint64_t PooledConnection<ConnectionT>::Id() {
+	return id;
 }
 
 template <typename ConnectionT>
@@ -100,6 +106,16 @@ void PooledConnection<ConnectionT>::ReturnToPool() noexcept {
 		}
 	}
 	pool = nullptr;
+}
+
+template <typename ConnectionT>
+uint64_t PooledConnection<ConnectionT>::NextId() {
+	static std::atomic<uint64_t> id_counter {0};
+	uint64_t next = id_counter.fetch_add(1, std::memory_order_acq_rel);
+	if (next != 0) {
+		return next;
+	}
+	return id_counter.fetch_add(1, std::memory_order_acq_rel);
 }
 
 } // namespace pool
