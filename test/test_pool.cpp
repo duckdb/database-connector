@@ -369,4 +369,11 @@ TEST_CASE("Test connection pool connection ids", group_name) {
 	REQUIRE(conn4.Id() == 0);
 	REQUIRE(conn1.Id() != conn2.Id());
 	REQUIRE(conn2.Id() != conn3.Id());
+	conn4 = std::move(conn3);
+	REQUIRE(conn4.Id() > 0);
+	REQUIRE(conn3.Id() == 0);
+	uint64_t conn4_id = conn4.Id();
+	conn2 = std::move(conn4);
+	REQUIRE(conn2.Id() == conn4_id);
+	REQUIRE(conn4.Id() == 0);
 }
