@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 #include "dbconnector/pool/acquire_mode.hpp"
 #include "dbconnector/pool/cached_connection.hpp"
@@ -61,6 +62,10 @@ public:
 	bool EnsureReaperRunning();
 	void ShutdownReaper();
 	uint64_t GetReaperPeriodMillis() const;
+
+	uint64_t PinConnection(PooledConnection<ConnectionT> conn);
+	PooledConnection<ConnectionT> UnpinConnection(uint64_t conn_id);
+	uint64_t GetPinnedConnections() const;
 
 protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
@@ -134,6 +139,9 @@ private:
 	std::atomic<bool> tl_cache_enabled {false};
 	std::atomic<uint64_t> tl_cache_hits {0};
 	std::atomic<uint64_t> tl_cache_misses {0};
+
+	mutable std::mutex pinned_connections_lock;
+	std::unordered_map<uint64_t, PooledConnection<ConnectionT>> pinned_connections;
 };
 
 } // namespace pool

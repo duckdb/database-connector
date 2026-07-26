@@ -769,5 +769,46 @@ bool ConnectionPool<ConnectionT>::IsPoolDisabled() {
 	return GetMaxConnections() == 0;
 }
 
+template <typename ConnectionT>
+uint64_t ConnectionPool<ConnectionT>::PinConnection(PooledConnection<ConnectionT> conn) {
+	if (!conn.OriginatesFrom(this)) {
+		throw PoolException("Specified connection, ID: " + std::to_string(conn.Id()) +
+		                    " does not originate from the specified attached database");
+	}
+	if (!conn || conn.Id() == 0) {
+		throw PoolException("Specified connection, ID:" + std::to_string(conn.Id()) + " is invalid");
+	}
+
+	std::lock_guard<std::mutex> guard(pinned_connections_lock);
+	uint64_t conn_id = conn.Id();
+	auto inserted = pinned_connections.emplace(conn_id, std::move(conn));
+	if (!inserted.second) {
+		throw PoolException("Error inserting pinned connection, ID: " + std::to_string(conn.Id()));
+	}
+	return conn_id;
+}
+
+template <typename ConnectionT>
+PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::UnpinConnection(uint64_t conn_id) {
+	std::lock_guard<std::mutex> guard(pinned_connections_lock);
+	auto it = pinned_connections.find(conn_id);
+	if (it == pinned_connections.end()) {
+		throw PoolException("Pinned connection, ID: " + std::to_string(conn_id) +
+		                    " not found in the specified attached database");
+	}
+	PooledConnection<ConnectionT> res = std::move(it->second);
+	bool erased = pinned_connections.erase(conn_id);
+	if (!erased) {
+		throw PoolException("Error erasing pinned connection, ID:" + std::to_string(conn_id));
+	}
+	return res;
+}
+
+template <typename ConnectionT>
+uint64_t ConnectionPool<ConnectionT>::GetPinnedConnections() const {
+	std::lock_guard<std::mutex> guard(pinned_connections_lock);
+	return pinned_connections.size();
+}
+
 } // namespace pool
 } // namespace dbconnector
