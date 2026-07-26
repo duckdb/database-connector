@@ -33,6 +33,8 @@ public:
 	std::chrono::steady_clock::time_point GetCreatedAt();
 
 	void Invalidate();
+	bool OriginatesFrom(ConnectionPool<ConnectionT> *conn_pool);
+	void PinBack();
 
 private:
 	void ReturnToPool() noexcept;

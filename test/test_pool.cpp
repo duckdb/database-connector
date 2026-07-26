@@ -377,3 +377,22 @@ TEST_CASE("Test connection pool connection ids", group_name) {
 	REQUIRE(conn2.Id() == conn4_id);
 	REQUIRE(conn4.Id() == 0);
 }
+
+TEST_CASE("Test connection pool pinning", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(1);
+	auto conn1 = pool->TryAcquire();
+	REQUIRE(conn1);
+	uint64_t conn1_id = conn1.Id();
+	REQUIRE(pool->GetAvailableConnections() == 0);
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->GetPinnedConnections() == 0);
+	pool->PinConnection(std::move(conn1));
+	REQUIRE(pool->GetAvailableConnections() == 0);
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->GetPinnedConnections() == 1);
+	auto unpinned = pool->UnpinConnection(conn1_id);
+	REQUIRE(pool->GetAvailableConnections() == 0);
+	REQUIRE(pool->GetTotalConnections() == 1);
+	REQUIRE(pool->GetPinnedConnections() == 0);
+	REQUIRE(unpinned.Id() == conn1_id);
+}

@@ -87,6 +87,20 @@ void PooledConnection<ConnectionT>::Invalidate() {
 }
 
 template <typename ConnectionT>
+bool PooledConnection<ConnectionT>::OriginatesFrom(ConnectionPool<ConnectionT> *conn_pool) {
+	return pool.get() == conn_pool;
+}
+
+template <typename ConnectionT>
+void PooledConnection<ConnectionT>::PinBack() {
+	if (!pool) {
+		throw PoolException("Cannot pin the connection, ID: " + std::to_string(Id()) +
+		                    " back because it is does not belong to the pool");
+	}
+	pool->PinConnection(std::move(*this));
+}
+
+template <typename ConnectionT>
 std::chrono::steady_clock::time_point PooledConnection<ConnectionT>::GetCreatedAt() {
 	return created_at;
 }
