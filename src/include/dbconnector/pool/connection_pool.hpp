@@ -67,6 +67,9 @@ public:
 	PooledConnection<ConnectionT> UnpinConnection(uint64_t conn_id);
 	uint64_t GetPinnedConnections() const;
 
+	std::string GetHealthCheckQuery() const;
+	void SetHealthCheckQuery(const std::string &query);
+
 protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
 	virtual bool CheckConnectionHealthy(ConnectionT &conn) = 0;
@@ -115,6 +118,9 @@ private:
 	mutable std::mutex pool_lock;
 	std::condition_variable pool_cv;
 
+	// function-scoped use only for config access
+	mutable std::mutex config_lock;
+
 	std::atomic<AcquireMode> acquire_mode {AcquireMode::FORCE};
 
 	std::atomic<uint64_t> max_connections {0};
@@ -142,6 +148,8 @@ private:
 
 	mutable std::mutex pinned_connections_lock;
 	std::unordered_map<uint64_t, PooledConnection<ConnectionT>> pinned_connections;
+
+	std::string health_check_query;
 };
 
 } // namespace pool

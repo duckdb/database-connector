@@ -17,6 +17,7 @@ struct ConnectionPoolConfig {
 	uint64_t max_lifetime_millis = 0;
 	uint64_t idle_timeout_millis = 60000;
 	bool start_reaper_thread = true;
+	std::string health_check_query = "SELECT 1";
 
 	static uint64_t DefaultPoolSizeFromHardwareConcurrency(uint64_t min_connections, uint64_t max_connections,
 	                                                       float hardware_concurrency_coef) {

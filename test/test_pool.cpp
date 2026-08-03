@@ -54,6 +54,7 @@ private:
 		config.tl_cache_enabled = tl_cache_enabled;
 		config.idle_timeout_millis = 0;
 		config.start_reaper_thread = false;
+		config.health_check_query = "SELECT 42";
 		return config;
 	}
 };
@@ -395,4 +396,11 @@ TEST_CASE("Test connection pool pinning", group_name) {
 	REQUIRE(pool->GetTotalConnections() == 1);
 	REQUIRE(pool->GetPinnedConnections() == 0);
 	REQUIRE(unpinned.Id() == conn1_id);
+}
+
+TEST_CASE("Test connection pool health check query", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(1);
+	REQUIRE(pool->GetHealthCheckQuery() == "SELECT 42");
+	pool->SetHealthCheckQuery("SELECT 43");
+	REQUIRE(pool->GetHealthCheckQuery() == "SELECT 43");
 }
