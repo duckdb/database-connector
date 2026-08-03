@@ -17,7 +17,8 @@ template <typename ConnectionT>
 ConnectionPool<ConnectionT>::ConnectionPool(ConnectionPoolConfig config)
     : acquire_mode(config.acquire_mode), max_connections(config.max_connections),
       wait_timeout_millis(config.wait_timeout_millis), max_lifetime_millis(config.max_lifetime_millis),
-      idle_timeout_millis(config.idle_timeout_millis), tl_cache_enabled(config.tl_cache_enabled) {
+      idle_timeout_millis(config.idle_timeout_millis), tl_cache_enabled(config.tl_cache_enabled),
+      health_check_query(config.health_check_query) {
 	if (config.start_reaper_thread) {
 		EnsureReaperRunning();
 	}
@@ -808,6 +809,18 @@ template <typename ConnectionT>
 uint64_t ConnectionPool<ConnectionT>::GetPinnedConnections() const {
 	std::lock_guard<std::mutex> guard(pinned_connections_lock);
 	return pinned_connections.size();
+}
+
+template <typename ConnectionT>
+std::string ConnectionPool<ConnectionT>::GetHealthCheckQuery() const {
+	std::lock_guard<std::mutex> guard(config_lock);
+	return std::string(health_check_query.data(), health_check_query.length());
+}
+
+template <typename ConnectionT>
+void ConnectionPool<ConnectionT>::SetHealthCheckQuery(const std::string &query) {
+	std::lock_guard<std::mutex> guard(config_lock);
+	this->health_check_query = std::string(query.data(), query.length());
 }
 
 } // namespace pool
