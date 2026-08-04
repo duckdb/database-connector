@@ -13,6 +13,8 @@ static const std::string group_name = "[pool]";
 
 static std::atomic<uint64_t> connection_id_counter(1);
 
+namespace {
+
 class TestConnection {
 	uint64_t id;
 
@@ -58,6 +60,8 @@ private:
 		return config;
 	}
 };
+
+} // namespace
 
 TEST_CASE("Test connection pool basic", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>();
