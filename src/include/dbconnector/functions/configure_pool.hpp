@@ -72,9 +72,9 @@ struct ConfigurePool {
 			if (!bdata.catalog_name.second && catalog.GetName() != Identifier(bdata.catalog_name.first)) {
 				continue;
 			}
-			cat_names.push_back(catalog.GetName().GetIdentifierName());
 			shared_ptr<pool::ConnectionPool<ConnectionT>> pool = GetConnnectionPoolFromCatalog(catalog);
 			if (pool) {
+				cat_names.push_back(catalog.GetName().GetIdentifierName());
 				pools.emplace_back(std::move(pool));
 			}
 		}
