@@ -83,6 +83,7 @@ unique_ptr<FunctionData> ConfigurePool::Bind(ClientContext &ctx, TableFunctionBi
 	AddColumn(return_types, names, "catalog_name", LogicalType::VARCHAR);
 	AddColumn(return_types, names, "acquire_mode", LogicalType::VARCHAR);
 	AddColumn(return_types, names, "available_connections", LogicalType::UBIGINT);
+	AddColumn(return_types, names, "total_connections", LogicalType::UBIGINT);
 	AddColumn(return_types, names, "max_connections", LogicalType::UBIGINT);
 	AddColumn(return_types, names, "wait_timeout_millis", LogicalType::UBIGINT);
 	AddColumn(return_types, names, "cache_hits", LogicalType::UBIGINT);
