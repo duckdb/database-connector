@@ -123,6 +123,7 @@ struct ConfigurePool {
 			output.data[col_idx++].SetValue(row_idx, Value(cat_names.at(row_idx)));
 			output.data[col_idx++].SetValue(row_idx, Value(pool::AcquireModeHelpers::ToString(pool->GetAcquireMode())));
 			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetAvailableConnections()));
+			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetTotalConnections()));
 			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetMaxConnections()));
 			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetWaitTimeoutMillis()));
 			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetCacheHits()));
