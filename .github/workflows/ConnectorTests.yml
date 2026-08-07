@@ -104,7 +104,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: 'duckdb'
-          ref: 'main'
+          # TODO: sync main with scanners
+          ref: 'f44d0d634bc111c017934438c3f253008bb8ba56'
           repository: duckdb/duckdb
 
       - name: Dependencies
