@@ -40,7 +40,7 @@ struct ConfigurePool {
 	static duckdb::unique_ptr<duckdb::FunctionData> Bind(duckdb::ClientContext &ctx,
 	                                                     duckdb::TableFunctionBindInput &input,
 	                                                     duckdb::vector<duckdb::LogicalType> &return_types,
-	                                                     duckdb::vector<std::string> &names);
+	                                                     duckdb::vector<duckdb::Identifier> &names);
 
 	static duckdb::unique_ptr<duckdb::GlobalTableFunctionState> InitGlobalState(duckdb::ClientContext &ctx,
 	                                                                            duckdb::TableFunctionInitInput &input);

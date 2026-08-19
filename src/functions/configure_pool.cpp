@@ -72,14 +72,14 @@ ConfigurePool::BindData::BindData(const named_parameter_map_t &map)
 	}
 }
 
-static void AddColumn(vector<LogicalType> &return_types, vector<string> &names, const std::string &col_name,
+static void AddColumn(vector<LogicalType> &return_types, vector<Identifier> &names, const Identifier &col_name,
                       LogicalType col_type) {
 	names.emplace_back(col_name);
 	return_types.emplace_back(col_type);
 }
 
 unique_ptr<FunctionData> ConfigurePool::Bind(ClientContext &ctx, TableFunctionBindInput &input,
-                                             vector<LogicalType> &return_types, vector<std::string> &names) {
+                                             vector<LogicalType> &return_types, vector<Identifier> &names) {
 	AddColumn(return_types, names, "catalog_name", LogicalType::VARCHAR);
 	AddColumn(return_types, names, "acquire_mode", LogicalType::VARCHAR);
 	AddColumn(return_types, names, "available_connections", LogicalType::UBIGINT);

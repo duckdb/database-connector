@@ -33,7 +33,7 @@ AggregateOptimizer::Config AggregateOptimizer::CreateConfig(ClientContext &ctx, 
 
 	res.enabled = false;
 	Value enabled_val;
-	if (ctx.TryGetCurrentSetting(enabled_option, enabled_val) && !enabled_val.IsNull()) {
+	if (ctx.TryGetCurrentSetting(Identifier(enabled_option), enabled_val) && !enabled_val.IsNull()) {
 		res.enabled = BooleanValue::Get(enabled_val);
 	}
 
