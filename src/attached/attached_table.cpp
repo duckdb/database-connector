@@ -26,14 +26,14 @@ AttachedCatalog &AttachedTable::GetCatalog() {
 
 AttachedTable AttachedTable::Lookup(duckdb::ClientContext &ctx, const std::string &catalog_type,
                                     const duckdb::QualifiedName &name) {
-	AttachedCatalog attached_catalog = AttachedCatalog::Lookup(ctx, catalog_type, name.Catalog());
+	AttachedCatalog attached_catalog = AttachedCatalog::Lookup(ctx, catalog_type, name.catalog);
 	if (!attached_catalog) {
 		return AttachedTable();
 	}
 	Catalog &catalog = attached_catalog.Get<Catalog>();
 
 	CatalogTransaction catalog_transaction(catalog, ctx);
-	EntryLookupInfo schema_lookup(CatalogType::SCHEMA_ENTRY, name.Schema());
+	EntryLookupInfo schema_lookup(CatalogType::SCHEMA_ENTRY, name.schema);
 	optional_ptr<SchemaCatalogEntry> schema_ptr =
 	    catalog.LookupSchema(catalog_transaction, schema_lookup, OnEntryNotFound::RETURN_NULL);
 	if (!schema_ptr) {
@@ -41,7 +41,7 @@ AttachedTable AttachedTable::Lookup(duckdb::ClientContext &ctx, const std::strin
 	}
 	SchemaCatalogEntry &schema = *schema_ptr;
 
-	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, name.Name());
+	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, name.name);
 	optional_ptr<CatalogEntry> table_ptr = schema.LookupEntry(catalog_transaction, table_lookup);
 	if (!table_ptr) {
 		return AttachedTable();
