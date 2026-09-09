@@ -13,6 +13,9 @@ if(NOT DEFINED ENV{DUCKDB_SRC_PATH})
 endif()
 
 add_executable(${PROJECT_NAME}
+    ../../src/attached/attached_catalog.cpp
+    ../../src/attached/attached_table.cpp
+    ../../src/functions/configure_pool.cpp
     ../../src/functions/configure_pool.cpp
     ../../src/optimizer/aggregate_optimizer.cpp
     ../../src/optimizer/optimizer_util.cpp

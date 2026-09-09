@@ -40,15 +40,15 @@ TEST_CASE("Test filter pushdown IN list constants", group_name) {
 		//! blob constants have to be written with the constant configuration - with the identifier
 		//! configuration the prefix and suffix are empty and EncodeBlob emits a bare 6470666B67'
 		duckdb::vector<duckdb::Value> values;
-		values.push_back(duckdb::Value::BLOB_RAW("dpfkg"));
-		values.push_back(duckdb::Value::BLOB_RAW("other"));
+		values.push_back(duckdb::Value::BLOB_RAW(std::string("dpfkg")));
+		values.push_back(duckdb::Value::BLOB_RAW(std::string("other")));
 		REQUIRE(TransformInFilter(duckdb::LogicalType::BLOB, std::move(values)) ==
 		        "\"col\" IN ('\\x6470666B67'::BYTEA, '\\x6F74686572'::BYTEA)");
 	}
 	{
 		duckdb::vector<duckdb::Value> values;
 		//! quote and backslash bytes are hex encoded, not quote escaped
-		values.push_back(duckdb::Value::BLOB_RAW("'\\"));
+		values.push_back(duckdb::Value::BLOB_RAW(std::string("'\\")));
 		REQUIRE(TransformInFilter(duckdb::LogicalType::BLOB, std::move(values)) == "\"col\" IN ('\\x275C'::BYTEA)");
 	}
 	{
