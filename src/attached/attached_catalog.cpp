@@ -19,7 +19,7 @@ bool AttachedCatalog::operator!() const noexcept {
 	return !static_cast<bool>(*this);
 }
 
-AttachedCatalog AttachedCatalog::Lookup(ClientContext &ctx, std::string catalog_type, Identifier name) {
+AttachedCatalog AttachedCatalog::Lookup(ClientContext &ctx, const std::string &catalog_type, const Identifier &name) {
 	vector<shared_ptr<AttachedDatabase>> databases = DatabaseManager::Get(ctx).GetDatabases(ctx);
 	for (shared_ptr<AttachedDatabase> &db_ptr : databases) {
 		AttachedDatabase &db = *db_ptr;

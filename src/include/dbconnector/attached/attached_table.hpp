@@ -35,7 +35,8 @@ public:
 
 	AttachedCatalog &GetCatalog();
 
-	static AttachedTable Lookup(duckdb::ClientContext &ctx, std::string catalog_type, duckdb::QualifiedName name);
+	static AttachedTable Lookup(duckdb::ClientContext &ctx, const std::string &catalog_type,
+	                            const duckdb::QualifiedName &name);
 
 private:
 	AttachedTable(AttachedCatalog attached_catalog, duckdb::TableCatalogEntry &table);

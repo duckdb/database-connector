@@ -24,7 +24,8 @@ AttachedCatalog &AttachedTable::GetCatalog() {
 	return attached_catalog;
 }
 
-AttachedTable AttachedTable::Lookup(duckdb::ClientContext &ctx, std::string catalog_type, duckdb::QualifiedName name) {
+AttachedTable AttachedTable::Lookup(duckdb::ClientContext &ctx, const std::string &catalog_type,
+                                    const duckdb::QualifiedName &name) {
 	AttachedCatalog attached_catalog = AttachedCatalog::Lookup(ctx, catalog_type, name.Catalog());
 	if (!attached_catalog) {
 		return AttachedTable();
