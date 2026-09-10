@@ -32,7 +32,8 @@ public:
 		return catalog->Cast<T>();
 	}
 
-	static AttachedCatalog Lookup(duckdb::ClientContext &ctx, std::string catalog_type, duckdb::Identifier name);
+	static AttachedCatalog Lookup(duckdb::ClientContext &ctx, const std::string &catalog_type,
+	                              const duckdb::Identifier &name);
 
 private:
 	AttachedCatalog(duckdb::shared_ptr<duckdb::AttachedDatabase> database, duckdb::Catalog &catalog);
