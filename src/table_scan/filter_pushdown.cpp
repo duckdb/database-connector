@@ -24,8 +24,7 @@ FilterPushdown::Config
 FilterPushdown::CreateConfig(char identifier_quote, char constant_quote, query::QuoteEscapeStyle escape_style,
                              const string &blob_literal_prefix, const string &blob_literal_suffix,
                              const std::string &varchar_comparison_collation, write_distinct_from_t write_distinct_from,
-                             get_constant_range_t get_constant_range,
-                             write_non_finite_comparizon_t write_non_finite_comparizon) {
+                             get_constant_range_t get_constant_range) {
 	Config res;
 	res.identifier_config = query::QueryWriter::CreateConfig(identifier_quote, escape_style);
 	res.constant_config =
@@ -33,7 +32,6 @@ FilterPushdown::CreateConfig(char identifier_quote, char constant_quote, query::
 	res.varchar_comparison_collation = varchar_comparison_collation;
 	res.write_distinct_from = write_distinct_from;
 	res.get_constant_range = get_constant_range;
-	res.write_non_finite_comparizon = write_non_finite_comparizon;
 	return res;
 }
 
@@ -81,13 +79,50 @@ static string WriteIsNotNull(const string &column_name, const BoundOperatorExpre
 	return string();
 }
 
-static string WriteComparison(const FilterPushdown::Config &config, const string &column_name, ExpressionType type,
-                              const string &constant_string) {
-	if ((type == ExpressionType::COMPARE_DISTINCT_FROM || type == ExpressionType::COMPARE_NOT_DISTINCT_FROM) &&
-	    config.write_distinct_from) {
-		return config.write_distinct_from(type, column_name, constant_string);
+//! Serialize a comparison against a constant that compares above / below every value the column
+//! can contain - the comparison is always true (for non-NULL values) or always false
+static string WriteNonFiniteComparison(const string &column_name, ExpressionType comparison_type,
+                                       dbconnector::table_scan::FilterConstantRange range) {
+	using dbconnector::table_scan::FilterConstantRange;
+
+	bool always_true;
+	switch (comparison_type) {
+	case ExpressionType::COMPARE_LESSTHAN:
+	case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+		always_true = range == FilterConstantRange::ABOVE_ALL_VALUES;
+		break;
+	case ExpressionType::COMPARE_GREATERTHAN:
+	case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		always_true = range == FilterConstantRange::BELOW_ALL_VALUES;
+		break;
+	case ExpressionType::COMPARE_NOTEQUAL:
+		always_true = true;
+		break;
+	case ExpressionType::COMPARE_EQUAL:
+		always_true = false;
+		break;
+	default:
+		return string();
 	}
-	string operator_string = GetComparizonOperator(type);
+	// note: a NULL value compares as NULL and is filtered out either way, matching IS NOT NULL
+	return always_true ? column_name + " IS NOT NULL" : "FALSE";
+}
+
+static string WriteComparison(const FilterPushdown::Config &config, const string &column_name,
+                              ExpressionType comparison_type, const Value &constant) {
+	if (config.get_constant_range) {
+		auto range = config.get_constant_range(constant);
+		if (range != FilterConstantRange::FINITE) {
+			return WriteNonFiniteComparison(column_name, comparison_type, range);
+		}
+	}
+	string constant_string = query::QueryWriter::WriteConstant(config.constant_config, constant);
+	if ((comparison_type == ExpressionType::COMPARE_DISTINCT_FROM ||
+	     comparison_type == ExpressionType::COMPARE_NOT_DISTINCT_FROM) &&
+	    config.write_distinct_from) {
+		return config.write_distinct_from(comparison_type, column_name, constant_string);
+	}
+	string operator_string = GetComparizonOperator(comparison_type);
 	if (operator_string.empty()) {
 		return string();
 	}
@@ -139,8 +174,7 @@ static string WriteCompareIn(const FilterPushdown::Config &config, const string 
 
 static string WriteConstantFilter(const FilterPushdown::Config &config, const string &column_name,
                                   ExpressionType comparison_type, const Value &constant) {
-	string constant_string = query::QueryWriter::WriteConstant(config.constant_config, constant);
-	string comparison = WriteComparison(config, column_name, comparison_type, constant_string);
+	string comparison = WriteComparison(config, column_name, comparison_type, constant);
 	if (constant.type().id() == LogicalTypeId::VARCHAR && !config.varchar_comparison_collation.empty()) {
 		string collation =
 		    query::QueryWriter::WriteQuotedAndEscaped(config.identifier_config, config.varchar_comparison_collation);
@@ -169,7 +203,7 @@ static string TransformComparison(const FilterPushdown::Config &config, const st
 		if (constant_range != FilterConstantRange::FINITE) {
 			// the constant cannot be represented in MySQL - but the column can never contain
 			// a non-finite value either, so the comparison has a known outcome
-			return config.write_non_finite_comparizon(column_name, comparison_type, constant_range);
+			return WriteNonFiniteComparison(column_name, comparison_type, constant_range);
 		}
 	}
 	auto constant_string = query::QueryWriter::WriteConstant(config.constant_config, *constant);
