@@ -28,7 +28,7 @@ TEST_CASE("Test query writer identifier", group_name) {
 static std::string TransformInFilter(const duckdb::LogicalType &type, duckdb::vector<duckdb::Value> values) {
 	//! the Postgres blob literal configuration: '\x<hex>'::BYTEA
 	auto config = dbconnector::table_scan::FilterPushdown::CreateConfig('"', '\'', QuoteEscapeStyle::DOUBLE_QUOTE,
-	                                                                    "'\\x", "::BYTEA");
+	                                                                    "'\\x", "'::BYTEA");
 	auto column = duckdb::make_uniq<duckdb::BoundReferenceExpression>(type, 0);
 	auto in_expr = duckdb::ExpressionFilter::CreateInExpression(std::move(column), std::move(values));
 	duckdb::ExpressionFilter filter(std::move(in_expr));

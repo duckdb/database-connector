@@ -32,7 +32,6 @@ public:
 		std::string varchar_comparison_collation;
 		write_distinct_from_t write_distinct_from = nullptr;
 		get_constant_range_t get_constant_range = nullptr;
-		write_non_finite_comparizon_t write_non_finite_comparizon = nullptr;
 	};
 
 	static Config CreateConfig(char identifier_quote, char constant_quote, query::QuoteEscapeStyle escape_style,
@@ -40,8 +39,7 @@ public:
 	                           const std::string &blob_literal_suffix = std::string(),
 	                           const std::string &varchar_comparison_collation = std::string(),
 	                           write_distinct_from_t write_distinct_from = nullptr,
-	                           get_constant_range_t get_constant_range = nullptr,
-	                           write_non_finite_comparizon_t write_non_finite_comparizon = nullptr);
+	                           get_constant_range_t get_constant_range = nullptr);
 
 	static std::string TransformFilter(const Config &config, const std::string &column_name,
 	                                   const duckdb::TableFilter &filter, duckdb::column_t column_id);

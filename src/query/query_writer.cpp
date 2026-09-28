@@ -54,7 +54,6 @@ std::string QueryWriter::EncodeBlob(const QueryWriter::Config &config, const std
 		result += HEX_DIGITS[(byte_val >> 4) & 0xf];
 		result += HEX_DIGITS[byte_val & 0xf];
 	}
-	result += "'";
 	result += config.blob_literal_suffix;
 	return result;
 }
