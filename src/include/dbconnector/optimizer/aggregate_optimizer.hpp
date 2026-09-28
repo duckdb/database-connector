@@ -10,7 +10,7 @@
 namespace dbconnector {
 namespace optimizer {
 
-typedef bool (*should_push_aggregate_t)(duckdb::ClientContext &context, duckdb::LogicalAggregate &aggr);
+using should_push_aggregate_t = bool (*)(duckdb::ClientContext &context, duckdb::LogicalAggregate &aggr);
 
 class AggregateOptimizer {
 public:
