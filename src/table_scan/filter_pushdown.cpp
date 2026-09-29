@@ -65,6 +65,51 @@ static bool IsDirectReference(const Expression &expr) {
 	}
 }
 
+static bool IsTypeSupported(const Value &value) {
+	// all ordinary non-composite types
+	switch (value.type().id()) {
+	case LogicalTypeId::SQLNULL:
+	case LogicalTypeId::BOOLEAN:
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::INTEGER:
+	case LogicalTypeId::BIGINT:
+	case LogicalTypeId::DATE:
+	case LogicalTypeId::TIME:
+	case LogicalTypeId::TIMESTAMP_SEC:
+	case LogicalTypeId::TIMESTAMP_MS:
+	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::DECIMAL:
+	case LogicalTypeId::FLOAT:
+	case LogicalTypeId::DOUBLE:
+	case LogicalTypeId::CHAR:
+	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::BLOB:
+	case LogicalTypeId::INTERVAL:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
+	case LogicalTypeId::UINTEGER:
+	case LogicalTypeId::UBIGINT:
+	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+	case LogicalTypeId::TIME_TZ:
+	case LogicalTypeId::TIME_NS:
+	case LogicalTypeId::BIT:
+	case LogicalTypeId::STRING_LITERAL:
+	case LogicalTypeId::INTEGER_LITERAL:
+	case LogicalTypeId::BIGNUM:
+	case LogicalTypeId::UHUGEINT:
+	case LogicalTypeId::HUGEINT:
+	case LogicalTypeId::POINTER:
+	case LogicalTypeId::VALIDITY:
+	case LogicalTypeId::UUID:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static string WriteIsNull(const string &column_name, const BoundOperatorExpression &op) {
 	if (op.GetChildren().size() == 1 && IsDirectReference(*op.GetChildren()[0])) {
 		return column_name + " IS NULL";
@@ -156,6 +201,9 @@ static string WriteCompareIn(const FilterPushdown::Config &config, const string 
 			return string();
 		}
 		auto &constant = op.GetChildren()[i]->Cast<BoundConstantExpression>().GetValue();
+		if (!IsTypeSupported(constant)) {
+			return string();
+		}
 		if (config.get_constant_range && config.get_constant_range(constant) != FilterConstantRange::FINITE) {
 			// the column can never contain a non-finite value - drop the element
 			continue;
@@ -196,6 +244,9 @@ static string TransformComparison(const FilterPushdown::Config &config, const st
 		constant = &left.Cast<BoundConstantExpression>().GetValue();
 		comparison_type = FlipComparisonExpression(comparison_type);
 	} else {
+		return string();
+	}
+	if (!IsTypeSupported(*constant)) {
 		return string();
 	}
 	if (config.get_constant_range) {
@@ -257,7 +308,7 @@ string FilterPushdown::TransformFilterExpression(const FilterPushdown::Config &c
 				comparison_type = FlipComparisonExpression(comparison_type);
 			}
 		}
-		if (!constant || subject.empty()) {
+		if (!constant || subject.empty() || !IsTypeSupported(*constant)) {
 			return string();
 		}
 		return WriteConstantFilter(config, subject, comparison_type, *constant);
