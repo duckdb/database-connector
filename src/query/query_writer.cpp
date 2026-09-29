@@ -59,18 +59,29 @@ std::string QueryWriter::EncodeBlob(const QueryWriter::Config &config, const std
 }
 
 std::string QueryWriter::WriteConstant(const QueryWriter::Config &config, const duckdb::Value &val) {
-	if (val.type().IsNumeric() || val.type().id() == duckdb::LogicalTypeId::BOOLEAN) {
+	using namespace duckdb;
+
+	if (val.type().id() == LogicalTypeId::DOUBLE) {
+		// ERROR:  type "double" does not exist - 'nan'::DOUBLE
+		auto dval = DoubleValue::Get(val);
+		if (std::isnan(dval)) {
+			return "'nan'::DOUBLE PRECISION";
+		}
+		if (std::isinf(dval)) {
+			return "'inf'::DOUBLE PRECISION";
+		}
+		// pass through
+	}
+	if (val.type().IsNumeric() || val.type().id() == LogicalTypeId::BOOLEAN) {
 		return val.ToSQLString();
 	}
-	if (val.type().id() == duckdb::LogicalTypeId::BLOB) {
-		return EncodeBlob(config, duckdb::StringValue::Get(val));
+	if (val.type().id() == LogicalTypeId::BLOB) {
+		return EncodeBlob(config, StringValue::Get(val));
 	}
-	if (val.type().id() == duckdb::LogicalTypeId::TIMESTAMP_TZ) {
-		return val.DefaultCastAs(duckdb::LogicalType::TIMESTAMP)
-		    .DefaultCastAs(duckdb::LogicalType::VARCHAR)
-		    .ToSQLString();
+	if (val.type().id() == LogicalTypeId::TIMESTAMP_TZ) {
+		return val.DefaultCastAs(LogicalType::TIMESTAMP).DefaultCastAs(LogicalType::VARCHAR).ToSQLString();
 	}
-	return val.DefaultCastAs(duckdb::LogicalType::VARCHAR).ToSQLString();
+	return val.DefaultCastAs(LogicalType::VARCHAR).ToSQLString();
 }
 
 } // namespace query
