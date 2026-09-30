@@ -21,7 +21,7 @@ bool OptimizerUtil::FindExtensionGet(const std::string &table_scan_name, Logical
 		return false;
 	}
 	auto &get = current.get().Cast<LogicalGet>();
-	if (get.function.name != table_scan_name) {
+	if (get.function.GetName() != table_scan_name) {
 		return false;
 	}
 	get_out = &get;

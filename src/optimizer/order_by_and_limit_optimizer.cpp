@@ -312,7 +312,7 @@ void OrderByAndLimitOptimizer::Optimize(const OrderByAndLimitOptimizer::Config &
 			return;
 		}
 		auto &get = child.get().Cast<LogicalGet>();
-		if (get.function.name != config.table_scan_name) {
+		if (get.function.GetName() != config.table_scan_name) {
 			return;
 		}
 		switch (limit.limit_val.Type()) {
