@@ -28,7 +28,7 @@ struct ConfigurePool {
 		std::pair<bool, bool> enable_reaper_thread;
 		std::pair<std::string, bool> health_check_query;
 
-		BindData(const duckdb::named_parameter_map_t &map);
+		BindData(const duckdb::named_argument_map_t &map);
 	};
 
 	struct GlobalState : public duckdb::GlobalTableFunctionState {};
