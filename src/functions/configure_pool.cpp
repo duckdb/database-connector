@@ -5,7 +5,7 @@ namespace functions {
 
 using namespace duckdb;
 
-static Value Lookup(const named_parameter_map_t &map, const std::string &key) {
+static Value Lookup(const named_argument_map_t &map, const std::string &key) {
 	auto it = map.find(Identifier(key));
 	if (it == map.end()) {
 		return Value();
@@ -13,7 +13,7 @@ static Value Lookup(const named_parameter_map_t &map, const std::string &key) {
 	return it->second;
 }
 
-static std::pair<std::string, bool> LookupString(const named_parameter_map_t &map, const std::string &key) {
+static std::pair<std::string, bool> LookupString(const named_argument_map_t &map, const std::string &key) {
 	Value val = Lookup(map, key);
 	if (val.IsNull()) {
 		return std::make_pair("", true);
@@ -22,7 +22,7 @@ static std::pair<std::string, bool> LookupString(const named_parameter_map_t &ma
 	return std::make_pair(std::move(str), false);
 }
 
-static std::pair<uint64_t, bool> LookupUBigInt(const named_parameter_map_t &map, const std::string &key) {
+static std::pair<uint64_t, bool> LookupUBigInt(const named_argument_map_t &map, const std::string &key) {
 	Value val = Lookup(map, key);
 	if (val.IsNull()) {
 		return std::make_pair(0, true);
@@ -31,7 +31,7 @@ static std::pair<uint64_t, bool> LookupUBigInt(const named_parameter_map_t &map,
 	return std::make_pair(num, false);
 }
 
-static std::pair<bool, bool> LookupBool(const named_parameter_map_t &map, const std::string &key) {
+static std::pair<bool, bool> LookupBool(const named_argument_map_t &map, const std::string &key) {
 	Value val = Lookup(map, key);
 	if (val.IsNull()) {
 		return std::make_pair(false, true);
@@ -40,7 +40,7 @@ static std::pair<bool, bool> LookupBool(const named_parameter_map_t &map, const 
 	return std::make_pair(flag, false);
 }
 
-static std::pair<dbconnector::pool::AcquireMode, bool> LookupAcquireMode(const named_parameter_map_t &map,
+static std::pair<dbconnector::pool::AcquireMode, bool> LookupAcquireMode(const named_argument_map_t &map,
                                                                          const std::string &key) {
 	std::pair<std::string, bool> st_pair = LookupString(map, key);
 	if (st_pair.second) {
@@ -54,7 +54,7 @@ static std::pair<dbconnector::pool::AcquireMode, bool> LookupAcquireMode(const n
 	}
 }
 
-ConfigurePool::BindData::BindData(const named_parameter_map_t &map)
+ConfigurePool::BindData::BindData(const named_argument_map_t &map)
     : catalog_name(LookupString(map, "catalog_name")), acquire_mode(LookupAcquireMode(map, "acquire_mode")),
       max_connections(LookupUBigInt(map, "max_connections")),
       wait_timeout_millis(LookupUBigInt(map, "wait_timeout_millis")),
