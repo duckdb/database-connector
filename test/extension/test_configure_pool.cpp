@@ -47,13 +47,10 @@ public:
 	                    dbconnector::functions::ConfigurePool::Bind,
 	                    dbconnector::functions::ConfigurePool::InitGlobalState,
 	                    dbconnector::functions::ConfigurePool::InitLocalState) {
-		for (auto &en : dbconnector::functions::ConfigurePool::NamedParameters()) {
-			named_parameters[en.first] = en.second;
-		}
 	}
 };
 
-TEST_CASE("Test configure pool impl cam be compiled", group_name) {
+TEST_CASE("Test configure pool impl can be compiled", group_name) {
 	TestConfigurePoolFunction func;
 	(void)func;
 }
