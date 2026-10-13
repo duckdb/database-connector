@@ -78,9 +78,6 @@ std::string QueryWriter::WriteConstant(const QueryWriter::Config &config, const 
 	if (val.type().id() == LogicalTypeId::BLOB) {
 		return EncodeBlob(config, StringValue::Get(val));
 	}
-	if (val.type().id() == LogicalTypeId::TIMESTAMP_TZ) {
-		return val.DefaultCastAs(LogicalType::TIMESTAMP).DefaultCastAs(LogicalType::VARCHAR).ToSQLString();
-	}
 	return val.DefaultCastAs(LogicalType::VARCHAR).ToSQLString();
 }
 

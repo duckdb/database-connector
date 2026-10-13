@@ -14,6 +14,8 @@ public:
 
 	static bool IsInternalFilter(const duckdb::TableFilter &filter);
 
+	static bool IsInternalExpression(const duckdb::Expression &expr);
+
 	static std::string ToString(const duckdb::TableFilter &filter);
 };
 

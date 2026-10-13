@@ -1,6 +1,8 @@
 #include "dbconnector/table_scan/filter_util.hpp"
 
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/filter/expression_filter.hpp"
+#include "duckdb/planner/filter/table_filter_functions.hpp"
 
 namespace dbconnector {
 namespace table_scan {
@@ -12,9 +14,12 @@ const duckdb::Expression &FilterUtil::GetExpression(const duckdb::TableFilter &f
 }
 
 bool FilterUtil::IsInternalFilter(const duckdb::TableFilter &filter) {
-	auto &expr = GetExpression(filter, "FilterPushdown::IsInternalFilter");
+	return IsInternalExpression(GetExpression(filter, "FilterPushdown::IsInternalFilter"));
+}
+
+bool FilterUtil::IsInternalExpression(const duckdb::Expression &expr) {
 	return expr.GetExpressionClass() == duckdb::ExpressionClass::BOUND_FUNCTION &&
-	       expr.ToString().find("__internal_tablefilter_") == 0;
+	       duckdb::TableFilterFunctions::IsTableFilterFunction(expr.Cast<duckdb::BoundFunctionExpression>().Function());
 }
 
 std::string FilterUtil::ToString(const duckdb::TableFilter &filter) {

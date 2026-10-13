@@ -180,7 +180,12 @@ static string WriteConjunction(const FilterPushdown::Config &config, const strin
 	for (auto &filter : filters) {
 		auto new_filter = FilterPushdown::TransformFilterExpression(config, column_name, *filter);
 		if (new_filter.empty()) {
-			continue;
+			if (op == "AND" && FilterUtil::IsInternalExpression(*filter)) {
+				// internal filters only prune rows, so an AND can go without them
+				continue;
+			}
+			// without one of its children the conjunction would select other rows
+			return string();
 		}
 		filter_entries.push_back(std::move(new_filter));
 	}
