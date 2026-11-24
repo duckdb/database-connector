@@ -115,8 +115,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 
 	for (auto &group : aggr.groups) {
 		auto &col_ref = group->Cast<BoundColumnRefExpression>();
-		TracedBindingColumn traced_binding =
-		    OptimizerUtil::TraceBindingToColumn(col_ref.BindingMutable(), aggr_child, get);
+		TracedBindingColumn traced_binding = OptimizerUtil::TraceBindingToColumn(col_ref.Binding(), aggr_child, get);
 		if (!traced_binding.Found()) {
 			return res;
 		}
@@ -138,7 +137,7 @@ static PushedAggregate TryPushAggregateToMySQL(const AggregateOptimizer::Config 
 		} else {
 			auto &child_ref = agg_expr.GetChildrenMutable()[0]->Cast<BoundColumnRefExpression>();
 			TracedBindingColumn traced_binding =
-			    OptimizerUtil::TraceBindingToColumn(child_ref.BindingMutable(), aggr_child, get);
+			    OptimizerUtil::TraceBindingToColumn(child_ref.Binding(), aggr_child, get);
 			if (!traced_binding.Found()) {
 				return res;
 			}
@@ -238,13 +237,14 @@ static void RewriteExpression(unique_ptr<Expression> &expr, AggregateRewriteInfo
 		if (col_ref.Depth() > 0) {
 			return;
 		}
-		if (col_ref.BindingMutable().table_index == info.group_index) {
-			col_ref.BindingMutable().table_index = info.scan_table_index;
-		} else if (col_ref.BindingMutable().table_index == info.aggregate_index) {
-			col_ref.BindingMutable().table_index = info.scan_table_index;
-			col_ref.BindingMutable().column_index =
-			    ProjectionIndex(col_ref.BindingMutable().column_index.GetIndex() + info.num_groups);
+		auto &binding = col_ref.Binding();
+		if (binding.table_index == info.group_index) {
+			expr = col_ref.WithBinding(ColumnBinding(info.scan_table_index, binding.column_index));
+		} else if (binding.table_index == info.aggregate_index) {
+			expr = col_ref.WithBinding(ColumnBinding(
+			    info.scan_table_index, ProjectionIndex(binding.column_index.GetIndex() + info.num_groups)));
 		}
+		return;
 	}
 	ExpressionIterator::EnumerateChildren(*expr,
 	                                      [&](unique_ptr<Expression> &child) { RewriteExpression(child, info); });

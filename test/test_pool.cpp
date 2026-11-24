@@ -402,6 +402,39 @@ TEST_CASE("Test connection pool pinning", group_name) {
 	REQUIRE(unpinned.Id() == conn1_id);
 }
 
+TEST_CASE("Test connection pool pinning with pool disabled", group_name) {
+	auto pool = std::make_shared<TestConnectionPool>(0);
+	auto conn1 = pool->ForceAcquire();
+	REQUIRE(conn1);
+	uint64_t conn1_id = conn1.Id();
+	uint64_t conn1_conn_id = conn1.GetConnection().GetId();
+	REQUIRE(conn1.OriginatesFrom(pool.get()));
+	REQUIRE(pool->PinConnection(std::move(conn1)) == conn1_id);
+	REQUIRE(pool->GetPinnedConnections() == 1);
+	REQUIRE(pool->GetTotalConnections() == 0);
+	{
+		// the connection can be taken out and pinned back multiple times
+		auto unpinned = pool->UnpinConnection(conn1_id);
+		REQUIRE(unpinned.GetConnection().GetId() == conn1_conn_id);
+		REQUIRE(pool->GetPinnedConnections() == 0);
+		REQUIRE(pool->PinConnection(std::move(unpinned)) == conn1_id);
+		REQUIRE(pool->GetPinnedConnections() == 1);
+	}
+	{
+		// once unpinned and released the connection is closed - not returned to the pool
+		auto unpinned = pool->UnpinConnection(conn1_id);
+	}
+	REQUIRE(pool->GetPinnedConnections() == 0);
+	REQUIRE(pool->GetAvailableConnections() == 0);
+	REQUIRE(pool->GetTotalConnections() == 0);
+
+	// an unpooled connection cannot be pinned in another pool
+	auto other_pool = std::make_shared<TestConnectionPool>(0);
+	auto conn2 = pool->ForceAcquire();
+	REQUIRE_FALSE(conn2.OriginatesFrom(other_pool.get()));
+	REQUIRE_THROWS(other_pool->PinConnection(std::move(conn2)));
+}
+
 TEST_CASE("Test connection pool health check query", group_name) {
 	auto pool = std::make_shared<TestConnectionPool>(1);
 	REQUIRE(pool->GetHealthCheckQuery() == "SELECT 42");

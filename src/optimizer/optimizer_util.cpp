@@ -25,7 +25,7 @@ bool OptimizerUtil::FindExtensionGet(const std::string &table_scan_name, Logical
 		return false;
 	}
 	get_out = &get;
-	bind_out = &get.bind_data->Cast<dbconnector::BindData>();
+	bind_out = &get.bind_data.write().Cast<dbconnector::BindData>();
 	return true;
 }
 
@@ -49,7 +49,7 @@ TracedBindingColumn OptimizerUtil::TraceBindingToColumn(ColumnBinding binding, L
 		if (inner_ref.Depth() > 0) {
 			return res;
 		}
-		binding = inner_ref.BindingMutable();
+		binding = inner_ref.Binding();
 		current = *current.get().children[0];
 	}
 

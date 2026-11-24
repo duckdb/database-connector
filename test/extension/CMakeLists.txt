@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.5...3.29)
 
 project (test_database_connector_ext C CXX)
 
+# DuckDB headers require C++17 (default on recent GCC, but not on AppleClang)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(MSVC) 
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
@@ -36,6 +40,16 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ../include
 )
 
+# Resolves to libduckdb.so on Linux, libduckdb.dylib on macOS and duckdb.lib on Windows
+find_library(DUCKDB_LIBRARY
+    NAMES duckdb
+    PATHS $ENV{DUCKDB_SRC_PATH}/build/release/src
+    NO_DEFAULT_PATH
+)
+if(NOT DUCKDB_LIBRARY)
+  message(FATAL_ERROR "DuckDB shared library not found in '$ENV{DUCKDB_SRC_PATH}/build/release/src'")
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    $ENV{DUCKDB_SRC_PATH}/build/release/src/libduckdb.so
+    ${DUCKDB_LIBRARY}
 )

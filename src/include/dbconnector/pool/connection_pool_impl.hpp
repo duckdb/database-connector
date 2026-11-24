@@ -330,7 +330,7 @@ PooledConnection<ConnectionT> ConnectionPool<ConnectionT>::ForceAcquire() {
 	if (pooling_disabled) {
 		cache_misses.fetch_add(1, std::memory_order_relaxed);
 		auto conn = CreateNewConnection();
-		return PooledConnection<ConnectionT>(nullptr, std::move(conn), now);
+		return PooledConnection<ConnectionT>::Unpooled(*this, std::move(conn), now);
 	}
 
 	{
