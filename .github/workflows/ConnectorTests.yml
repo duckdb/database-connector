@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: 'duckdb'
-          ref: 'v2.0-cyanoptera'
+          ref: 'main'
           repository: duckdb/duckdb
 
       - name: Dependencies

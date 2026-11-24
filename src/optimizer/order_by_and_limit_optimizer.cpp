@@ -45,7 +45,7 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 	if (col_ref.Depth() > 0) {
 		return std::string();
 	}
-	auto binding = col_ref.BindingMutable();
+	auto binding = col_ref.Binding();
 
 	reference<LogicalOperator> current = child;
 	while (current.get().type == LogicalOperatorType::LOGICAL_PROJECTION) {
@@ -64,7 +64,7 @@ static string TraceColumnToGet(const OrderByAndLimitOptimizer::Config &config, E
 		if (inner_ref.Depth() > 0) {
 			return std::string();
 		}
-		binding = inner_ref.BindingMutable();
+		binding = inner_ref.Binding();
 		current = *current.get().children[0];
 	}
 
@@ -128,26 +128,29 @@ static string TryBuildOrderByClause(const OrderByAndLimitOptimizer::Config &conf
 static void CollectBindingRefs(Expression &expr, idx_t target_table_index, unordered_set<idx_t> &referenced) {
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
 		auto &ref = expr.Cast<BoundColumnRefExpression>();
-		if (ref.BindingMutable().table_index.index == target_table_index) {
-			referenced.insert(ref.BindingMutable().column_index);
+		if (ref.Binding().table_index.index == target_table_index) {
+			referenced.insert(ref.Binding().column_index);
 		}
 	}
 	ExpressionIterator::EnumerateChildren(
 	    expr, [&](unique_ptr<Expression> &child) { CollectBindingRefs(*child, target_table_index, referenced); });
 }
 
-static void RewriteBindingRefs(Expression &expr, idx_t target_table_index, unordered_map<idx_t, idx_t> &old_to_new) {
-	if (expr.GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
-		auto &ref = expr.Cast<BoundColumnRefExpression>();
-		if (ref.BindingMutable().table_index.index == target_table_index) {
-			auto it = old_to_new.find(ref.BindingMutable().column_index);
+static void RewriteBindingRefs(unique_ptr<Expression> &expr, idx_t target_table_index,
+                               unordered_map<idx_t, idx_t> &old_to_new) {
+	if (expr->GetExpressionClass() == ExpressionClass::BOUND_COLUMN_REF) {
+		auto &ref = expr->Cast<BoundColumnRefExpression>();
+		auto &binding = ref.Binding();
+		if (binding.table_index.index == target_table_index) {
+			auto it = old_to_new.find(binding.column_index);
 			if (it != old_to_new.end()) {
-				ref.BindingMutable().column_index = ProjectionIndex(it->second);
+				expr = ref.WithBinding(ColumnBinding(binding.table_index, ProjectionIndex(it->second)));
+				return;
 			}
 		}
 	}
 	ExpressionIterator::EnumerateChildren(
-	    expr, [&](unique_ptr<Expression> &child) { RewriteBindingRefs(*child, target_table_index, old_to_new); });
+	    *expr, [&](unique_ptr<Expression> &child) { RewriteBindingRefs(child, target_table_index, old_to_new); });
 }
 
 static void PruneProjectionLayer(LogicalProjection &proj, const unordered_set<idx_t> &keep_indices,
@@ -164,7 +167,7 @@ static void PruneProjectionLayer(LogicalProjection &proj, const unordered_set<id
 
 	for (auto *above : above_projs) {
 		for (auto &expr : above->expressions) {
-			RewriteBindingRefs(*expr, proj.table_index.index, old_to_new);
+			RewriteBindingRefs(expr, proj.table_index.index, old_to_new);
 		}
 	}
 }
@@ -240,7 +243,7 @@ static void PruneColumnsAfterOrderByRemoval(LogicalOperator &child, LogicalGet &
 
 		for (auto *proj : proj_chain) {
 			for (auto &expr : proj->expressions) {
-				RewriteBindingRefs(*expr, get.table_index.index, get_old_to_new);
+				RewriteBindingRefs(expr, get.table_index.index, get_old_to_new);
 			}
 		}
 	}
@@ -329,7 +332,7 @@ void OrderByAndLimitOptimizer::Optimize(const OrderByAndLimitOptimizer::Config &
 		default:
 			return;
 		}
-		auto &bind_data = get.bind_data->Cast<dbconnector::BindData>();
+		auto &bind_data = get.bind_data.write().Cast<dbconnector::BindData>();
 		auto &order_by_and_limit_bind_data = bind_data.GetOrderByAndLimitBindData();
 		if (!order_by_and_limit_bind_data.limit_clause.empty()) {
 			return;
