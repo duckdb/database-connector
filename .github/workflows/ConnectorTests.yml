@@ -7,27 +7,32 @@ on:
 jobs:
   format-check:
     name: Format Check
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-slim' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - run: |
-          python -m pip install --user clang_format==11.0.1
+          python -m pip install --user --break-system-packages clang_format==11.0.1
+          export PATH=~/.local/bin:$PATH
+          which clang-format
+          clang-format --version
           make format-check
 
   linux-tests-amd64:
     name: Linux Tests (amd64)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-x64' || 'ubuntu-latest' }}
     needs: format-check
     env:
       GEN: ninja
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Dependencies
         run: |
-          echo "set man-db/auto-update false" | sudo debconf-communicate
-          sudo dpkg-reconfigure man-db
+          echo "set man-db/auto-update false" | sudo debconf-communicate || true
+          sudo dpkg-reconfigure man-db || true
           sudo apt-get update -y -q -o=Dpkg::Use-Pty=0
           sudo apt-get install -y -q -o=Dpkg::Use-Pty=0 \
             ninja-build
@@ -38,10 +43,10 @@ jobs:
 
   windows-tests-amd64:
     name: Windows Tests (amd64)
-    runs-on: windows-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-windows-x64' || 'windows-latest' }}
     needs: linux-tests-amd64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Build and Test
         shell: cmd
@@ -54,12 +59,18 @@ jobs:
 
   macos-tests-aarch64:
     name: macOS Tests (aarch64)
-    runs-on: macos-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-macos-arm64' || 'macos-latest' }}
     needs: linux-tests-amd64
     env:
       GEN: ninja
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      - name: Install Dependencies
+        run: |
+          brew install -q \
+            ccache \
+            ninja
 
       - name: Build and Test
         run: |
@@ -67,18 +78,18 @@ jobs:
 
   linux-threads-amd64:
     name: Linux Threads (amd64)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-x64' || 'ubuntu-latest' }}
     needs: linux-tests-amd64
     env:
       GEN: ninja
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Dependencies
         run: |
-          echo "set man-db/auto-update false" | sudo debconf-communicate
-          sudo dpkg-reconfigure man-db
+          echo "set man-db/auto-update false" | sudo debconf-communicate || true
+          sudo dpkg-reconfigure man-db || true
           sudo apt-get update -y -q -o=Dpkg::Use-Pty=0
           sudo apt-get install -y -q -o=Dpkg::Use-Pty=0 \
             ninja-build
@@ -89,7 +100,7 @@ jobs:
 
   linux-ext-amd64:
     name: Linux Extension (amd64)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-x64' || 'ubuntu-latest' }}
     needs: linux-tests-amd64
     env:
       GEN: ninja
@@ -98,10 +109,10 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/ccache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout Engine
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: 'duckdb'
           ref: 'v2.0-cyanoptera'
@@ -109,8 +120,8 @@ jobs:
 
       - name: Dependencies
         run: |
-          echo "set man-db/auto-update false" | sudo debconf-communicate
-          sudo dpkg-reconfigure man-db
+          echo "set man-db/auto-update false" | sudo debconf-communicate || true
+          sudo dpkg-reconfigure man-db || true
           sudo apt-get update -y -q -o=Dpkg::Use-Pty=0
           sudo apt-get install -y -q -o=Dpkg::Use-Pty=0 \
             build-essential \
@@ -127,7 +138,7 @@ jobs:
           echo "value=${KEY}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/ccache
           key: ${{ steps.cache_key.outputs.value }}
@@ -138,7 +149,7 @@ jobs:
           make release
 
       - name: Save Cache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/ccache
           key: ${{ steps.cache_key.outputs.value }}
