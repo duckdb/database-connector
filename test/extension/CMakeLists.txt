@@ -29,6 +29,7 @@ add_executable(${PROJECT_NAME}
     ../../src/table_scan/filter_util.cpp
     ../test_common.cpp
     test_configure_pool.cpp
+    test_connect.cpp
     test_query.cpp
 )
 
