@@ -17,7 +17,7 @@ template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(std::shared_ptr<ConnectionPool<ConnectionT>> pool_p,
                                                 std::unique_ptr<ConnectionT> connection_p,
                                                 std::chrono::steady_clock::time_point created_at_p)
-    : id(NextId()), pool(std::move(pool_p)), connection(std::move(connection_p)), valid(true),
+    : id(NextId()), pool(std::move(pool_p)), origin(pool.get()), connection(std::move(connection_p)), valid(true),
       created_at(created_at_p) {
 }
 
@@ -28,15 +28,26 @@ PooledConnection<ConnectionT>::PooledConnection(std::shared_ptr<ConnectionPool<C
 }
 
 template <typename ConnectionT>
+PooledConnection<ConnectionT>
+PooledConnection<ConnectionT>::Unpooled(ConnectionPool<ConnectionT> &origin_p,
+                                        std::unique_ptr<ConnectionT> connection_p,
+                                        std::chrono::steady_clock::time_point created_at_p) {
+	PooledConnection<ConnectionT> result(nullptr, std::move(connection_p), created_at_p);
+	result.origin = &origin_p;
+	return result;
+}
+
+template <typename ConnectionT>
 PooledConnection<ConnectionT>::~PooledConnection() noexcept {
 	ReturnToPool();
 }
 
 template <typename ConnectionT>
 PooledConnection<ConnectionT>::PooledConnection(PooledConnection &&other) noexcept
-    : id(other.id), pool(std::move(other.pool)), connection(std::move(other.connection)), valid(other.valid),
-      created_at(other.created_at) {
+    : id(other.id), pool(std::move(other.pool)), origin(other.origin), connection(std::move(other.connection)),
+      valid(other.valid), created_at(other.created_at) {
 	other.id = 0;
+	other.origin = nullptr;
 	other.valid = false;
 }
 
@@ -47,6 +58,8 @@ PooledConnection<ConnectionT> &PooledConnection<ConnectionT>::operator=(PooledCo
 		this->id = other.id;
 		other.id = 0;
 		this->pool = std::move(other.pool);
+		this->origin = other.origin;
+		other.origin = nullptr;
 		this->connection = std::move(other.connection);
 		this->valid = other.valid;
 		other.valid = false;
@@ -88,7 +101,7 @@ void PooledConnection<ConnectionT>::Invalidate() {
 
 template <typename ConnectionT>
 bool PooledConnection<ConnectionT>::OriginatesFrom(ConnectionPool<ConnectionT> *conn_pool) {
-	return pool.get() == conn_pool;
+	return conn_pool != nullptr && origin == conn_pool;
 }
 
 template <typename ConnectionT>
