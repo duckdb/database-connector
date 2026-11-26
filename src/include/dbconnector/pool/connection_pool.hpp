@@ -70,6 +70,9 @@ public:
 	std::string GetHealthCheckQuery() const;
 	void SetHealthCheckQuery(const std::string &query);
 
+	uint64_t GetAliveBypassWindowMillis() const;
+	void SetAliveBypassWindowMillis(uint64_t new_alive_bypass_window_millis);
+
 protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
 	virtual bool CheckConnectionHealthy(ConnectionT &conn) = 0;
@@ -93,11 +96,14 @@ private:
 	void Discard();
 
 	bool TimeoutEnabled() const;
+	bool TimeTrackingEnabled() const;
 	std::chrono::steady_clock::time_point GetNowForTimeoutPurposes();
 	static bool TimePointExpired(std::chrono::steady_clock::time_point point, uint64_t timeout_millis,
 	                             std::chrono::steady_clock::time_point now);
 	bool IsExpired(const CachedConnection<ConnectionT> &cached_conn, std::chrono::steady_clock::time_point now) const;
 	bool IsExpired(std::chrono::steady_clock::time_point created_at, std::chrono::steady_clock::time_point now) const;
+	bool IsWithinAliveBypassWindow(const CachedConnection<ConnectionT> &cached_conn,
+	                               std::chrono::steady_clock::time_point now) const;
 	bool CheckConnectionNotExpiredAndHealthy(std::unique_lock<std::mutex> &lock,
 	                                         CachedConnection<ConnectionT> &cached_conn,
 	                                         std::chrono::steady_clock::time_point now);
@@ -134,6 +140,7 @@ private:
 
 	std::atomic<uint64_t> max_lifetime_millis {0};
 	std::atomic<uint64_t> idle_timeout_millis {0};
+	std::atomic<uint64_t> alive_bypass_window_millis {0};
 
 	std::thread reaper_thread;
 	std::condition_variable reaper_cv;

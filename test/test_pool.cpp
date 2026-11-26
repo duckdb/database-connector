@@ -40,12 +40,17 @@ protected:
 	}
 
 	bool CheckConnectionHealthy(TestConnection &) override {
-		return true;
+		health_checks.fetch_add(1, std::memory_order_relaxed);
+		return healthy.load(std::memory_order_relaxed);
 	}
 
 	void ResetConnection(TestConnection &) override {
 		// no-op
 	}
+
+public:
+	std::atomic<uint64_t> health_checks {0};
+	std::atomic<bool> healthy {true};
 
 private:
 	static dbconnector::pool::ConnectionPoolConfig CreateConfig(size_t max_connections, size_t timeout_ms,
@@ -440,4 +445,75 @@ TEST_CASE("Test connection pool health check query", group_name) {
 	REQUIRE(pool->GetHealthCheckQuery() == "SELECT 42");
 	pool->SetHealthCheckQuery("SELECT 43");
 	REQUIRE(pool->GetHealthCheckQuery() == "SELECT 43");
+}
+
+TEST_CASE("Test connection pool alive bypass window", group_name) {
+	for (bool tl_cache_enabled : {false, true}) {
+		auto pool = std::make_shared<TestConnectionPool>(4, 1000, tl_cache_enabled);
+		REQUIRE(pool->GetAliveBypassWindowMillis() == 500);
+
+		// new connection is not checked
+		{ auto conn = pool->WaitAcquire(); }
+		REQUIRE(pool->health_checks == 0);
+
+		// recently returned connection is not checked
+		{ auto conn = pool->WaitAcquire(); }
+		REQUIRE(pool->health_checks == 0);
+
+		// connection idle for longer than the window is checked
+		std::this_thread::sleep_for(std::chrono::milliseconds(600));
+		{ auto conn = pool->WaitAcquire(); }
+		REQUIRE(pool->health_checks == 1);
+
+		// bypass disabled, every reuse is checked
+		pool->SetAliveBypassWindowMillis(0);
+		REQUIRE(pool->GetAliveBypassWindowMillis() == 0);
+		{ auto conn = pool->WaitAcquire(); }
+		{ auto conn = pool->TryAcquire(); }
+		{ auto conn = pool->ForceAcquire(); }
+		REQUIRE(pool->health_checks == 4);
+
+		REQUIRE(pool->GetTotalConnections() == 1);
+		REQUIRE(pool->GetCacheMisses() == 1);
+		if (tl_cache_enabled) {
+			REQUIRE(pool->GetThreadLocalCacheHits() == 5);
+		} else {
+			REQUIRE(pool->GetThreadLocalCacheHits() == 0);
+		}
+	}
+}
+
+TEST_CASE("Test connection pool unhealthy connection", group_name) {
+	for (bool tl_cache_enabled : {false, true}) {
+		auto pool = std::make_shared<TestConnectionPool>(4, 1000, tl_cache_enabled);
+		pool->SetAliveBypassWindowMillis(0);
+
+		uint64_t first_conn_id = 0;
+		{
+			auto conn = pool->WaitAcquire();
+			first_conn_id = conn.GetConnection().GetId();
+		}
+
+		// unhealthy connection is discarded on acquire and replaced with a new one
+		pool->healthy = false;
+		uint64_t second_conn_id = 0;
+		{
+			auto conn = pool->WaitAcquire();
+			second_conn_id = conn.GetConnection().GetId();
+			REQUIRE(second_conn_id != first_conn_id);
+			REQUIRE(pool->GetTotalConnections() == 1);
+			// return time is only tracked when bypass (or timeouts) are enabled
+			pool->SetAliveBypassWindowMillis(500);
+		}
+		REQUIRE(pool->health_checks > 0);
+		REQUIRE(pool->GetTotalConnections() == 1);
+
+		// within the bypass window the connection is reused without a check
+		uint64_t checks_before = pool->health_checks;
+		{
+			auto conn = pool->WaitAcquire();
+			REQUIRE(conn.GetConnection().GetId() == second_conn_id);
+		}
+		REQUIRE(pool->health_checks == checks_before);
+	}
 }

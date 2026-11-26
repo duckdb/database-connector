@@ -17,8 +17,8 @@ template <typename ConnectionT>
 ConnectionPool<ConnectionT>::ConnectionPool(ConnectionPoolConfig config)
     : acquire_mode(config.acquire_mode), max_connections(config.max_connections),
       wait_timeout_millis(config.wait_timeout_millis), max_lifetime_millis(config.max_lifetime_millis),
-      idle_timeout_millis(config.idle_timeout_millis), tl_cache_enabled(config.tl_cache_enabled),
-      health_check_query(config.health_check_query) {
+      idle_timeout_millis(config.idle_timeout_millis), alive_bypass_window_millis(config.alive_bypass_window_millis),
+      tl_cache_enabled(config.tl_cache_enabled), health_check_query(config.health_check_query) {
 	if (config.start_reaper_thread) {
 		EnsureReaperRunning();
 	}
@@ -79,7 +79,8 @@ ConnectionPool<ConnectionT>::TryAcquireFromThreadLocal(std::chrono::steady_clock
 		return CachedConnection<ConnectionT>();
 	}
 
-	if (!CheckConnectionHealthy(cache.cached_conn.GetConnection())) {
+	if (!IsWithinAliveBypassWindow(cache.cached_conn, now) &&
+	    !CheckConnectionHealthy(cache.cached_conn.GetConnection())) {
 		cache.Clear();
 		tl_cache_misses.fetch_add(1, std::memory_order_relaxed);
 		return CachedConnection<ConnectionT>();
@@ -529,8 +530,13 @@ bool ConnectionPool<ConnectionT>::TimeoutEnabled() const {
 }
 
 template <typename ConnectionT>
+bool ConnectionPool<ConnectionT>::TimeTrackingEnabled() const {
+	return TimeoutEnabled() || alive_bypass_window_millis.load(std::memory_order_relaxed) > 0;
+}
+
+template <typename ConnectionT>
 std::chrono::steady_clock::time_point ConnectionPool<ConnectionT>::GetNowForTimeoutPurposes() {
-	if (TimeoutEnabled()) {
+	if (TimeTrackingEnabled()) {
 		return std::chrono::steady_clock::now();
 	} else {
 		return std::chrono::steady_clock::time_point();
@@ -578,12 +584,34 @@ bool ConnectionPool<ConnectionT>::IsExpired(std::chrono::steady_clock::time_poin
 	return TimePointExpired(created_at, max_lifetime_val, now);
 }
 
+template <typename ConnectionT>
+bool ConnectionPool<ConnectionT>::IsWithinAliveBypassWindow(const CachedConnection<ConnectionT> &cached_conn,
+                                                            std::chrono::steady_clock::time_point now) const {
+	uint64_t window_millis = alive_bypass_window_millis.load(std::memory_order_relaxed);
+	if (window_millis == 0) {
+		return false;
+	}
+	auto zero = std::chrono::steady_clock::duration::zero();
+	// time points are not tracked when the bypass window was disabled at return time
+	if (now.time_since_epoch() == zero || cached_conn.GetReturnedAt().time_since_epoch() == zero) {
+		return false;
+	}
+	// 'now' may be captured slightly before the connection was returned by another thread
+	int64_t idle_millis =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - cached_conn.GetReturnedAt()).count();
+	return idle_millis < 0 || static_cast<uint64_t>(idle_millis) < window_millis;
+}
+
 template <typename ConnectionT> // specified lock must be held
 bool ConnectionPool<ConnectionT>::CheckConnectionNotExpiredAndHealthy(std::unique_lock<std::mutex> &lock,
                                                                       CachedConnection<ConnectionT> &cached_conn,
                                                                       std::chrono::steady_clock::time_point now) {
 	if (IsExpired(cached_conn, now)) {
 		return false;
+	}
+
+	if (IsWithinAliveBypassWindow(cached_conn, now)) {
+		return true;
 	}
 
 	lock.unlock();
@@ -814,6 +842,16 @@ template <typename ConnectionT>
 void ConnectionPool<ConnectionT>::SetHealthCheckQuery(const std::string &query) {
 	std::lock_guard<std::mutex> guard(config_lock);
 	this->health_check_query = std::string(query.data(), query.length());
+}
+
+template <typename ConnectionT>
+uint64_t ConnectionPool<ConnectionT>::GetAliveBypassWindowMillis() const {
+	return alive_bypass_window_millis.load(std::memory_order_relaxed);
+}
+
+template <typename ConnectionT>
+void ConnectionPool<ConnectionT>::SetAliveBypassWindowMillis(uint64_t new_alive_bypass_window_millis) {
+	this->alive_bypass_window_millis.store(new_alive_bypass_window_millis, std::memory_order_relaxed);
 }
 
 } // namespace pool

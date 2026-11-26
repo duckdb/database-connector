@@ -62,11 +62,12 @@ ConfigurePool::BindData::BindData(const named_argument_map_t &map)
       max_lifetime_millis(LookupUBigInt(map, "max_lifetime_millis")),
       idle_timeout_millis(LookupUBigInt(map, "idle_timeout_millis")),
       enable_reaper_thread(LookupBool(map, "enable_reaper_thread")),
-      health_check_query(LookupString(map, "health_check_query")) {
+      health_check_query(LookupString(map, "health_check_query")),
+      alive_bypass_window_millis(LookupUBigInt(map, "alive_bypass_window_millis")) {
 	if (catalog_name.second &&
 	    !(acquire_mode.second && max_connections.second && wait_timeout_millis.second &&
 	      enable_thread_local_cache.second && max_lifetime_millis.second && idle_timeout_millis.second &&
-	      enable_reaper_thread.second && health_check_query.second)) {
+	      enable_reaper_thread.second && health_check_query.second && alive_bypass_window_millis.second)) {
 		throw BinderException("'catalog_name' argument must be specified to change any option value on the "
 		                      "connection pool of this catalog");
 	}
@@ -97,6 +98,7 @@ unique_ptr<FunctionData> ConfigurePool::Bind(ClientContext &ctx, TableFunctionBi
 	AddColumn(return_types, names, "reaper_thread_running", LogicalType::BOOLEAN);
 	AddColumn(return_types, names, "reaper_thread_period_millis", LogicalType::UBIGINT);
 	AddColumn(return_types, names, "health_check_query", LogicalType::VARCHAR);
+	AddColumn(return_types, names, "alive_bypass_window_millis", LogicalType::UBIGINT);
 
 	return make_uniq<BindData>(input.named_parameters);
 }
@@ -121,6 +123,7 @@ named_parameter_type_map_t ConfigurePool::NamedParameters() {
 	res["idle_timeout_millis"] = LogicalType::UBIGINT;
 	res["enable_reaper_thread"] = LogicalType::BOOLEAN;
 	res["health_check_query"] = LogicalType::VARCHAR;
+	res["alive_bypass_window_millis"] = LogicalType::UBIGINT;
 	return res;
 }
 

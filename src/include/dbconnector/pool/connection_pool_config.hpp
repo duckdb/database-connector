@@ -18,6 +18,9 @@ struct ConnectionPoolConfig {
 	uint64_t idle_timeout_millis = 60000;
 	bool start_reaper_thread = true;
 	std::string health_check_query = "SELECT 1";
+	//! The health check is skipped on acquire if the connection was returned
+	//! to the pool less than this number of milliseconds ago, 0 disables bypass.
+	uint64_t alive_bypass_window_millis = 500;
 
 	static uint64_t DefaultPoolSizeFromHardwareConcurrency(uint64_t min_connections, uint64_t max_connections,
 	                                                       float hardware_concurrency_coef) {
