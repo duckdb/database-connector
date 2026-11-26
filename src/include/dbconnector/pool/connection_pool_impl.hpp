@@ -79,9 +79,16 @@ ConnectionPool<ConnectionT>::TryAcquireFromThreadLocal(std::chrono::steady_clock
 		return CachedConnection<ConnectionT>();
 	}
 
-	if (!IsWithinAliveBypassWindow(cache.cached_conn, now) &&
-	    !CheckConnectionHealthy(cache.cached_conn.GetConnection())) {
-		cache.Clear();
+	bool alive = IsWithinAliveBypassWindow(cache.cached_conn, now)
+	                 ? CheckConnectionAliveNoRoundTrip(cache.cached_conn.GetConnection())
+	                 : CheckConnectionHealthy(cache.cached_conn.GetConnection());
+	if (!alive) {
+		// close the connection instead of using 'cache.Clear()', that would move it to the shared pool,
+		// where it would be checked once more before being discarded
+		cache.cached_conn.reset();
+		cache.owner.reset();
+		cache.available = false;
+		Discard();
 		tl_cache_misses.fetch_add(1, std::memory_order_relaxed);
 		return CachedConnection<ConnectionT>();
 	}
@@ -610,13 +617,15 @@ bool ConnectionPool<ConnectionT>::CheckConnectionNotExpiredAndHealthy(std::uniqu
 		return false;
 	}
 
-	if (IsWithinAliveBypassWindow(cached_conn, now)) {
-		return true;
-	}
+	bool within_bypass_window = IsWithinAliveBypassWindow(cached_conn, now);
 
+	// the connection is already taken out of 'available', no need to hold the lock while checking it
 	lock.unlock();
 	auto deferred = Defer([&lock] { lock.lock(); });
 
+	if (within_bypass_window) {
+		return CheckConnectionAliveNoRoundTrip(cached_conn.GetConnection());
+	}
 	return CheckConnectionHealthy(cached_conn.GetConnection());
 }
 

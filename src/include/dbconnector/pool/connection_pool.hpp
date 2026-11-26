@@ -77,6 +77,13 @@ protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
 	virtual bool CheckConnectionHealthy(ConnectionT &conn) = 0;
 	virtual void ResetConnection(ConnectionT &conn) = 0;
+	//! Called instead of CheckConnectionHealthy when the connection is taken from the pool within the alive
+	//! bypass window. Must be cheap and must not block (no round trip to the server), for example it can only
+	//! check for the connection close that is already received from the server. Returning false discards the
+	//! connection. The default implementation does no checks.
+	virtual bool CheckConnectionAliveNoRoundTrip(ConnectionT &) {
+		return true;
+	}
 
 	//! Calls fn(conn) for each idle connection while holding pool_lock.
 	//! fn MUST NOT call any pool method that acquires pool_lock.
