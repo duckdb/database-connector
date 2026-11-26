@@ -27,6 +27,7 @@ struct ConfigurePool {
 		std::pair<uint64_t, bool> idle_timeout_millis;
 		std::pair<bool, bool> enable_reaper_thread;
 		std::pair<std::string, bool> health_check_query;
+		std::pair<uint64_t, bool> alive_bypass_window_millis;
 
 		BindData(const duckdb::named_argument_map_t &map);
 	};
@@ -114,6 +115,9 @@ struct ConfigurePool {
 			if (!bdata.health_check_query.second) {
 				pool->SetHealthCheckQuery(bdata.health_check_query.first);
 			}
+			if (!bdata.alive_bypass_window_millis.second) {
+				pool->SetAliveBypassWindowMillis(bdata.alive_bypass_window_millis.first);
+			}
 		}
 
 		// set results
@@ -137,6 +141,7 @@ struct ConfigurePool {
 			output.data[col_idx++].SetValue(row_idx, Value::BOOLEAN(pool->IsReaperRunning()));
 			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetReaperPeriodMillis()));
 			output.data[col_idx++].SetValue(row_idx, Value(pool->GetHealthCheckQuery()));
+			output.data[col_idx++].SetValue(row_idx, Value::UBIGINT(pool->GetAliveBypassWindowMillis()));
 			row_idx++;
 		}
 
