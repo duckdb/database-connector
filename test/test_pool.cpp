@@ -505,7 +505,8 @@ TEST_CASE("Test connection pool unhealthy connection", group_name) {
 			// return time is only tracked when bypass (or timeouts) are enabled
 			pool->SetAliveBypassWindowMillis(500);
 		}
-		REQUIRE(pool->health_checks > 0);
+		// the unhealthy connection is checked once, also when it is taken from the thread-local cache
+		REQUIRE(pool->health_checks == 1);
 		REQUIRE(pool->GetTotalConnections() == 1);
 
 		// within the bypass window the connection is reused without a check
@@ -515,5 +516,81 @@ TEST_CASE("Test connection pool unhealthy connection", group_name) {
 			REQUIRE(conn.GetConnection().GetId() == second_conn_id);
 		}
 		REQUIRE(pool->health_checks == checks_before);
+	}
+}
+
+namespace {
+
+class TestNoRoundTripCheckPool : public TestConnectionPool {
+public:
+	TestNoRoundTripCheckPool(bool tl_cache_enabled) : TestConnectionPool(4, 1000, tl_cache_enabled) {
+	}
+
+protected:
+	bool CheckConnectionAliveNoRoundTrip(TestConnection &) override {
+		no_round_trip_checks.fetch_add(1, std::memory_order_relaxed);
+		return alive.load(std::memory_order_relaxed);
+	}
+
+public:
+	std::atomic<uint64_t> no_round_trip_checks {0};
+	std::atomic<bool> alive {true};
+};
+
+} // namespace
+
+TEST_CASE("Test connection pool no round trip check in alive bypass window", group_name) {
+	for (bool tl_cache_enabled : {false, true}) {
+		auto pool = std::make_shared<TestNoRoundTripCheckPool>(tl_cache_enabled);
+		REQUIRE(pool->GetAliveBypassWindowMillis() == 500);
+
+		// new connection is not checked
+		uint64_t first_conn_id = 0;
+		{
+			auto conn = pool->WaitAcquire();
+			first_conn_id = conn.GetConnection().GetId();
+		}
+		REQUIRE(pool->no_round_trip_checks == 0);
+		REQUIRE(pool->health_checks == 0);
+
+		// within the window only the no round trip check is called, with every acquire mode
+		{ auto conn = pool->WaitAcquire(); }
+		{ auto conn = pool->TryAcquire(); }
+		{ auto conn = pool->ForceAcquire(); }
+		REQUIRE(pool->no_round_trip_checks == 3);
+		REQUIRE(pool->health_checks == 0);
+
+		// connection that fails the no round trip check is discarded and replaced with a new one
+		pool->alive = false;
+		uint64_t second_conn_id = 0;
+		{
+			auto conn = pool->WaitAcquire();
+			second_conn_id = conn.GetConnection().GetId();
+			REQUIRE(second_conn_id != first_conn_id);
+			REQUIRE(pool->GetTotalConnections() == 1);
+		}
+		// the connection that fails the check is discarded right away, also the thread-local one,
+		// it is not checked once more in the shared pool
+		uint64_t checks_after_discard = 4;
+		REQUIRE(pool->no_round_trip_checks == checks_after_discard);
+		REQUIRE(pool->health_checks == 0);
+		REQUIRE(pool->GetCacheMisses() == 2);
+
+		// outside of the window only the full health check is called
+		pool->alive = true;
+		std::this_thread::sleep_for(std::chrono::milliseconds(600));
+		{
+			auto conn = pool->WaitAcquire();
+			REQUIRE(conn.GetConnection().GetId() == second_conn_id);
+		}
+		REQUIRE(pool->no_round_trip_checks == checks_after_discard);
+		REQUIRE(pool->health_checks == 1);
+
+		// bypass disabled, the no round trip check is never called
+		pool->SetAliveBypassWindowMillis(0);
+		{ auto conn = pool->WaitAcquire(); }
+		REQUIRE(pool->no_round_trip_checks == checks_after_discard);
+		REQUIRE(pool->health_checks == 2);
+		REQUIRE(pool->GetTotalConnections() == 1);
 	}
 }
