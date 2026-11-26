@@ -388,13 +388,6 @@ void ConnectionPool<ConnectionT>::Return(std::unique_ptr<ConnectionT> conn,
 		return;
 	}
 
-	if (!CheckConnectionHealthy(*conn)) {
-		if (!TryRecoverConnection(*conn)) {
-			Discard();
-			return;
-		}
-	}
-
 	try {
 		ResetConnection(*conn);
 	} catch (...) {
