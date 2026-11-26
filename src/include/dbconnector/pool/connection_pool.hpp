@@ -74,9 +74,6 @@ protected:
 	virtual std::unique_ptr<ConnectionT> CreateNewConnection() = 0;
 	virtual bool CheckConnectionHealthy(ConnectionT &conn) = 0;
 	virtual void ResetConnection(ConnectionT &conn) = 0;
-	virtual bool TryRecoverConnection(ConnectionT &) {
-		return false;
-	}
 
 	//! Calls fn(conn) for each idle connection while holding pool_lock.
 	//! fn MUST NOT call any pool method that acquires pool_lock.
