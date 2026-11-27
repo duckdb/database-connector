@@ -426,6 +426,15 @@ TEST_CASE("Test connection pool pinning with pool disabled", group_name) {
 		REQUIRE(pool->GetPinnedConnections() == 1);
 	}
 	{
+		// the connection can be pinned back without a reference to the pool
+		auto unpinned = pool->UnpinConnection(conn1_id);
+		REQUIRE(pool->GetPinnedConnections() == 0);
+		unpinned.PinBack();
+		REQUIRE_FALSE(unpinned);
+		REQUIRE(pool->GetPinnedConnections() == 1);
+		REQUIRE(pool->GetTotalConnections() == 0);
+	}
+	{
 		// once unpinned and released the connection is closed - not returned to the pool
 		auto unpinned = pool->UnpinConnection(conn1_id);
 	}

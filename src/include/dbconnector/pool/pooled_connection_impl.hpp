@@ -106,11 +106,14 @@ bool PooledConnection<ConnectionT>::OriginatesFrom(ConnectionPool<ConnectionT> *
 
 template <typename ConnectionT>
 void PooledConnection<ConnectionT>::PinBack() {
-	if (!pool) {
+	// the unpooled connections (acquired when the pooling is disabled) have no pool, but can still be pinned in the
+	// pool they were acquired from
+	auto target = origin;
+	if (!target) {
 		throw PoolException("Cannot pin the connection, ID: " + std::to_string(Id()) +
-		                    " back because it is does not belong to the pool");
+		                    " back because it does not originate from a pool");
 	}
-	pool->PinConnection(std::move(*this));
+	target->PinConnection(std::move(*this));
 }
 
 template <typename ConnectionT>
